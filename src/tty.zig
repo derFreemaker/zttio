@@ -1,0 +1,91 @@
+const std = @import("std");
+const builin = @import("builtin");
+
+const RawMode = @import("raw_mode.zig");
+const Event = @import("event.zig").Event;
+const Reader = @import("reader.zig");
+
+const DebugAllocator = if (builin.mode == .Debug)
+    std.heap.DebugAllocator(.{
+        .never_unmap = true,
+        .retain_metadata = true,
+    })
+else
+    void;
+
+const Tty = @This();
+
+stdin: std.fs.File,
+stdout: std.fs.File,
+raw_mode: RawMode,
+
+debug_allocator: DebugAllocator,
+allocator: std.mem.Allocator,
+event_allocator: std.mem.Allocator,
+
+stdout_writer_buf: []const u8,
+stdout_writer: std.fs.File.Writer,
+
+reader: Reader,
+
+pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, stdin: std.fs.File, stdout: std.fs.File) error{ OutOfMemory, NoTty, UnableToEnterRawMode, UnableToStartReader }!*Tty {
+    if (!stdin.isTty()) return error.NoTty;
+    const raw_mode = RawMode.enable(stdin.handle, stdout.handle) catch return error.UnableToEnterRawMode;
+
+    const ptr = try allocator.create(Tty);
+    errdefer allocator.destroy(ptr);
+
+    ptr.stdin = stdin;
+    ptr.stdout = stdout;
+    ptr.raw_mode = raw_mode;
+
+    if (builin.mode == .Debug) {
+        ptr.debug_allocator = DebugAllocator{
+            .backing_allocator = allocator,
+        };
+    }
+    errdefer if (builin.mode == .Debug) {
+        if (ptr.debug_allocator.deinit() == .leak)
+            @panic("leaks found in tty");
+    };
+    ptr.allocator = if (builin.mode == .Debug)
+        ptr.debug_allocator.allocator()
+    else
+        allocator;
+    ptr.event_allocator = event_allocator;
+
+    ptr.stdout_writer_buf = try ptr.allocator.alloc(u8, 4096);
+    errdefer ptr.allocator.free(ptr.stdout_writer_buf);
+    ptr.stdout_writer = stdout.writer(@constCast(ptr.stdout_writer_buf));
+
+    ptr.reader = try .init(ptr.allocator, event_allocator, stdin.handle, stdout.handle);
+    errdefer ptr.reader.deinit(ptr.allocator);
+
+    ptr.reader.start() catch |err| switch (err) {
+        error.OutOfMemory => return error.OutOfMemory,
+        else => return error.UnableToStartReader,
+    };
+
+    return ptr;
+}
+
+pub fn deinit(self: *Tty) void {
+    self.writer().flush() catch {};
+
+    self.reader.deinit(self.allocator);
+
+    self.raw_mode.disable();
+
+    if (builin.mode == .Debug) {
+        if (self.debug_allocator.deinit() == .leak)
+            @panic("leaks found in tty");
+    }
+}
+
+pub fn writer(self: *Tty) *std.Io.Writer {
+    return &self.stdout_writer.interface;
+}
+
+test {
+    _ = std.testing.refAllDeclsRecursive(@This());
+}
