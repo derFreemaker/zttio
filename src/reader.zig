@@ -3,6 +3,7 @@ const builtin = @import("builtin");
 
 const Event = @import("event.zig").Event;
 const Queue = @import("queue.zig").Queue;
+const Parser = @import("parser.zig");
 
 const InternalReader = if (builtin.os.tag == .windows)
     @import("reader/win_reader.zig")
@@ -14,6 +15,7 @@ const Reader = @This();
 event_allocator: std.mem.Allocator,
 
 internal: InternalReader,
+parser: Parser,
 
 thread: ?std.Thread = null,
 should_quit: bool = false,
@@ -25,7 +27,8 @@ pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, st
         .event_allocator = event_allocator,
         
         .internal = InternalReader.init(stdin, stdout),
-
+        .parser = .init(allocator, event_allocator),
+        
         .queue = try .init(allocator),
     };
 }
@@ -33,6 +36,7 @@ pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, st
 pub fn deinit(self: *Reader, allocator: std.mem.Allocator) void {
     self.stop();
     
+    self.parser.deinit();
     self.queue.deinit(allocator);
 }
 
