@@ -1,4 +1,4 @@
-# ztty
+# zttio
 TTY interface with main focus on making it easy to get input from the terminal like keystrokes and mouse interactions.
 
 ## Third-Party

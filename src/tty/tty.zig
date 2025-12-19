@@ -1,8 +1,9 @@
 const std = @import("std");
 const builin = @import("builtin");
+const common = @import("common");
 
-const RawMode = @import("raw_mode.zig");
-const Event = @import("event.zig").Event;
+const RawMode = common.RawMode;
+const Event = common.Event;
 const Reader = @import("reader.zig");
 
 const DebugAllocator = if (builin.mode == .Debug)

@@ -15,7 +15,7 @@ const RawMode = @This();
 
 original_state: ?OrignalState,
 
-pub fn enable(stdin: std.fs.File.Handle, stdout: std.fs.File.Handle) error{InvalidHandle, Unexpected}!RawMode {
+pub fn enable(stdin: std.fs.File.Handle, stdout: std.fs.File.Handle) error{ InvalidHandle, Unexpected }!RawMode {
     return RawMode{
         .original_state = if (builtin.os.tag == .windows)
             try enableWindows(stdin, stdout)
@@ -26,7 +26,7 @@ pub fn enable(stdin: std.fs.File.Handle, stdout: std.fs.File.Handle) error{Inval
 
 pub fn disable(self: *RawMode) void {
     const org_state = self.original_state orelse return;
-    
+
     if (builtin.os.tag == .windows) {
         disableWindows(org_state);
     } else {
@@ -35,7 +35,7 @@ pub fn disable(self: *RawMode) void {
     }
 }
 
-fn enableWindows(stdin: std.fs.File.Handle, stdout: std.fs.File.Handle) error{InvalidHandle, Unexpected}!OrignalState {
+fn enableWindows(stdin: std.fs.File.Handle, stdout: std.fs.File.Handle) error{ InvalidHandle, Unexpected }!OrignalState {
     const input_raw_mode: WIN_CONSOLE_MODE_INPUT = .{
         .WINDOW_INPUT = 1, // resize events
         .MOUSE_INPUT = 1,
@@ -43,6 +43,7 @@ fn enableWindows(stdin: std.fs.File.Handle, stdout: std.fs.File.Handle) error{In
         .PROCESSED_INPUT = 0,
         .LINE_INPUT = 0,
         .ECHO_INPUT = 0,
+        .VIRTUAL_TERMINAL_INPUT = 1,
     };
 
     const output_raw_mode: WIN_CONSOLE_MODE_OUTPUT = .{

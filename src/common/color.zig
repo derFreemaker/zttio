@@ -40,7 +40,7 @@ pub const Color = union(enum) {
     /// parse an XParseColor-style rgb specification into an rgb Color. The spec
     /// is of the form: rgb:rrrr/gggg/bbbb. Generally, the high two bits will always
     /// be the same as the low two bits.
-    pub fn rgbFromSpec(spec: []const u8) !Color {
+    pub fn rgbFromSpec(spec: []const u8) error{InvalidColorSpec, Overflow, InvalidCharacter}!Color {
         var iter = std.mem.splitScalar(u8, spec, ':');
         const prefix = iter.next() orelse return error.InvalidColorSpec;
         if (!std.mem.eql(u8, "rgb", prefix)) return error.InvalidColorSpec;

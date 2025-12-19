@@ -1,7 +1,7 @@
 .{
-    .name = .ztty,
+    .name = .zttio,
     .version = "0.1.0",
-    .fingerprint = 0x14b42a026abd33b4, // Changing this has security and trust implications.
+    .fingerprint = 0xabd754137085977b, // Changing this has security and trust implications.
     .minimum_zig_version = "0.15.2",
     .dependencies = .{
         .zigwin32 = .{

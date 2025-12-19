@@ -2,13 +2,14 @@ const std = @import("std");
 const zigwin = @import("zigwin");
 const windows = std.os.windows;
 const winconsole = zigwin.system.console;
+const common = @import("common");
 
-const Key = @import("../key.zig");
-const Mouse = @import("../mouse.zig");
-const Winsize = @import("../winsize.zig");
+const Key = common.Key;
+const Mouse = common.Mouse;
+const Winsize = common.Winsize;
 const ReadResult = @import("../reader.zig").ReadResult;
 
-const log = std.log.scoped(.ztty);
+const log = std.log.scoped(.zttio_tty_win_reader);
 
 const WinReader = @This();
 

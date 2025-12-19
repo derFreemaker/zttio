@@ -1,8 +1,9 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const common = @import("common");
 
-const Event = @import("event.zig").Event;
-const Queue = @import("queue.zig").Queue;
+const Event = common.Event;
+const Queue = common.Queue;
 const Parser = @import("parser.zig");
 
 const InternalReader = if (builtin.os.tag == .windows)
@@ -12,7 +13,11 @@ else
 
 const Reader = @This();
 
+allocator: std.mem.Allocator,
 event_allocator: std.mem.Allocator,
+
+in_paste: bool = false,
+paste_buf: std.ArrayList(u8),
 
 internal: InternalReader,
 parser: Parser,
@@ -24,18 +29,21 @@ queue: Queue(Event, 512),
 
 pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, stdin: std.fs.File.Handle, stdout: std.fs.File.Handle) error{OutOfMemory}!Reader {
     return Reader{
+        .allocator = allocator,
         .event_allocator = event_allocator,
-        
+
+        .paste_buf = .empty,
+
         .internal = InternalReader.init(stdin, stdout),
-        .parser = .init(allocator, event_allocator),
-        
+        .parser = .init(allocator),
+
         .queue = try .init(allocator),
     };
 }
 
 pub fn deinit(self: *Reader, allocator: std.mem.Allocator) void {
     self.stop();
-    
+
     self.parser.deinit();
     self.queue.deinit(allocator);
 }
@@ -55,6 +63,10 @@ pub fn stop(self: *Reader) void {
     self.should_quit = false;
 }
 
+pub fn postEvent(self: *Reader, event: Event) void {
+    return self.queue.push(event);
+}
+
 pub fn nextEvent(self: *Reader) Event {
     return self.queue.pop();
 }
@@ -62,10 +74,41 @@ pub fn nextEvent(self: *Reader) Event {
 fn runReader(self: *Reader) !void {
     if (builtin.is_test) return;
 
+    //TODO: use a ring buffer
+    const buf: std.ArrayList(u8) = .empty;
     while (!self.should_quit) {
-        const event = try self.internal.next(self.event_allocator);
-        _ = event;
+        const may_read_result = try self.internal.next(self.event_allocator);
+        const read_result = may_read_result orelse {
+            self.parseBuf(buf.items);
+            continue;
+        };
+
+        switch (read_result) {
+            .event => |event| {
+                if (!self.parser.consumeInPaste(event)) {
+                    self.postEvent(event);
+                }
+            },
+        }
     }
+}
+
+fn parseBuf(self: *Reader, buf: []u8) void {
+    const result = try self.parser.parse(buf, self.event_allocator);
+    switch (result.parse) {
+        .none => return,
+        .event => |event| {
+            self.postEvent(event);
+        },
+        .skip => {},
+        .paste_start => {
+            std.debug.assert(!self.in_paste);
+            self.in_paste = true;
+        },
+        .paste_end => unreachable,
+    }
+
+    @memmove(buf[0 .. buf.len - result.n], buf[result.n..]);
 }
 
 pub const ReadResult = union(enum) {
