@@ -10,6 +10,7 @@ const DebugAllocator = if (builin.mode == .Debug)
     std.heap.DebugAllocator(.{
         .never_unmap = true,
         .retain_metadata = true,
+        .stack_trace_frames = 50,
     })
 else
     void;
@@ -20,6 +21,7 @@ stdin: std.fs.File,
 stdout: std.fs.File,
 raw_mode: RawMode,
 
+arena: std.heap.ArenaAllocator,
 debug_allocator: DebugAllocator,
 allocator: std.mem.Allocator,
 event_allocator: std.mem.Allocator,
@@ -40,9 +42,10 @@ pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, st
     ptr.stdout = stdout;
     ptr.raw_mode = raw_mode;
 
+    ptr.arena = .init(allocator);
     if (builin.mode == .Debug) {
         ptr.debug_allocator = DebugAllocator{
-            .backing_allocator = allocator,
+            .backing_allocator = ptr.arena.allocator(),
         };
     }
     errdefer if (builin.mode == .Debug) {
@@ -52,7 +55,7 @@ pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, st
     ptr.allocator = if (builin.mode == .Debug)
         ptr.debug_allocator.allocator()
     else
-        allocator;
+        ptr.arena.allocator();
     ptr.event_allocator = event_allocator;
 
     ptr.stdout_writer_buf = try ptr.allocator.alloc(u8, 4096);
@@ -71,16 +74,24 @@ pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, st
 }
 
 pub fn deinit(self: *Tty) void {
-    self.writer().flush() catch {};
-
     self.reader.deinit(self.allocator);
-
     self.raw_mode.disable();
+
+    self.writer().flush() catch {};
+    self.allocator.free(self.stdout_writer_buf);
 
     if (builin.mode == .Debug) {
         if (self.debug_allocator.deinit() == .leak)
             @panic("leaks found in tty");
     }
+
+    const allocator = self.arena.child_allocator;
+    self.arena.deinit();
+    allocator.destroy(self);
+}
+
+pub inline fn nextEvent(self: *Tty) Event {
+    return self.reader.nextEvent();
 }
 
 pub fn writer(self: *Tty) *std.Io.Writer {

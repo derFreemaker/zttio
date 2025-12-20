@@ -1,3 +1,5 @@
+const std = @import("std");
+
 const Key = @import("key.zig");
 const Mouse = @import("mouse.zig");
 const Color = @import("color.zig").Color;
@@ -18,4 +20,45 @@ pub const Event = union(enum) {
     color_scheme: Color.Scheme,
 
     winsize: Winsize,
+
+    pub fn deinit(event: *const Event, allocator: std.mem.Allocator) void {
+        switch (event.*) {
+            .key_press, .key_release => |key| {
+                if (key.text) |text| {
+                    allocator.free(text);
+                }
+            },
+            .paste => |p| {
+                allocator.free(p);
+            },
+            else => {},
+        }
+    }
+
+    pub fn clone(event: *const Event, allocator: std.mem.Allocator) error{OutOfMemory}!Event {
+        switch (event.*) {
+            .key_press => |key| {
+                if (key.text) |text| {
+                    var new_key = key;
+                    new_key.text = try allocator.dupe(u8, text);
+                    return Event{ .key_press = new_key };
+                }
+
+                return event.*;
+            },
+            .key_release => |key| {
+                if (key.text) |text| {
+                    var new_key = key;
+                    new_key.text = try allocator.dupe(u8, text);
+                    return Event{ .key_release = new_key };
+                }
+
+                return event.*;
+            },
+            .paste => |p| {
+                return Event{ .paste = try allocator.dupe(u8, p) };
+            },
+            else => return event.*,
+        }
+    }
 };

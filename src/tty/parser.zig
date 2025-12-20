@@ -12,11 +12,6 @@ const log = std.log.scoped(.zttio_tty_parser);
 
 const Parser = @This();
 
-// const State = union(enum) {
-//     normal,
-//     paste,
-// };
-
 /// The return type of our parse method. Contains an Event and the number of
 /// bytes read from the buffer.
 pub const Result = struct {
@@ -113,13 +108,13 @@ pub fn parse(self: *Parser, input: []const u8) !Result {
     // We gate this for len > 1 so we can detect singular escape key presses
     if (input[0] == 0x1b and input.len > 1) {
         switch (input[1]) {
-            0x4F => return self.parseSs3(input),
+            0x4F => return parseSs3(input),
             0x50 => return skipUntilST(input), // DCS
             0x58 => return skipUntilST(input), // SOS
             0x5B => return self.parseCsi(input), // CSI
             0x5D => return self.parseOsc(input),
             0x5E => return skipUntilST(input), // PM
-            0x5F => return self.parseApc(input),
+            0x5F => return parseApc(input),
             else => {
                 // Anything else is an "alt + <char>" keypress
                 const key: Key = .{
@@ -201,7 +196,7 @@ fn parseGround(input: []const u8) !Result {
     };
 }
 
-fn parseSs3(_: *Parser, input: []const u8) Result {
+fn parseSs3(input: []const u8) Result {
     if (input.len < 3) {
         return .none;
     }
@@ -229,7 +224,7 @@ fn parseSs3(_: *Parser, input: []const u8) Result {
     };
 }
 
-fn parseApc(_: *Parser, input: []const u8) Result {
+fn parseApc(input: []const u8) Result {
     if (input.len < 3) {
         return .none;
     }

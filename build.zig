@@ -43,7 +43,34 @@ pub fn build(b: *std.Build) void {
             .{ .name = "common", .module = common_mod },
         },
     });
-
+    
+    const zttio_mod = b.addModule("zttio", .{
+        .target = target,
+        .optimize = optimize,
+        
+        .root_source_file = b.path("src/zttio.zig"),
+        
+        .imports = &.{
+            .{ .name = "tty", .module = tty_mod },
+        },
+    });
+    
+    const test_exe_mod = b.addModule("test_exe", .{
+        .target = target,
+        .optimize = optimize,
+        
+        .root_source_file = b.path("src/test_exe.zig"),
+        
+        .imports = &.{
+            .{ .name = "zttio", .module = zttio_mod },     
+        },
+    });
+    const test_exe = b.addExecutable(.{
+        .name = "test_exe",
+        .root_module = test_exe_mod,
+    });
+    b.installArtifact(test_exe);
+    
     const tty_tests = b.addTest(.{
         .root_module = tty_mod,
     });
