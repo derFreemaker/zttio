@@ -35,59 +35,6 @@ explicit_width: bool = false,
 scaled_text: bool = false,
 multi_cursor: bool = false,
 
-// fn discoverTerminalCapabilities(self: *Tty) error{WriteFailed}!void {
-//     self.caps.queries_done.store(false, .unordered);
-//
-//     {
-//         const colorterm: ?[]u8 = std.process.getEnvVarOwned(self.allocator, "COLORTERM") catch null;
-//         if (colorterm) |term| {
-//             defer self.allocator.free(term);
-//             if (std.mem.eql(u8, colorterm, "truecolor") or
-//                 std.mem.eql(u8, colorterm, "24bit"))
-//             {
-//                 self.caps.cap_rgb = true;
-//             }
-//         }
-//     }
-//
-//     const queries = ctlseqs.Queries;
-//
-//     // TODO: XTGETTCAP queries ("RGB", "Smulx")
-//     // TODO: decide if we actually want to query for focus and sync. It
-//     // doesn't hurt to blindly use them
-//     // _ = try tty.write(ctlseqs.decrqm_focus);
-//     // _ = try tty.write(ctlseqs.decrqm_sync);
-//     try self.writer.writeAll(queries.decrqm_sgr_pixels ++
-//         queries.decrqm_unicode ++
-//         queries.decrqm_color_scheme ++
-//         ctlseqs.in_band_resize_set ++
-//         ctlseqs.bp_set ++
-//
-//         // Explicit width query. We send the cursor home, then do an explicit width command, then
-//         // query the position. If the parsed value is an F3 with shift, we support explicit width.
-//         // The returned response will be something like \x1b[1;2R...which when parsed as a Key is a
-//         // shift + F3 (the row is ignored). We only care if the column has moved from 1->2, which is
-//         // why we see a Shift modifier
-//         ctlseqs.Cursor.home ++
-//         queries.explicit_width_query ++
-//         queries.cursor_position_request ++
-//         // Explicit width query. We send the cursor home, then do an scaled text command, then
-//         // query the position. If the parsed value is an F3 with al, we support scaled text.
-//         // The returned response will be something like \x1b[1;3R...which when parsed as a Key is a
-//         // alt + F3 (the row is ignored). We only care if the column has moved from 1->3, which is
-//         // why we see a Shift modifier
-//         ctlseqs.Cursor.home ++
-//         queries.scaled_text_query ++
-//         queries.cursor_position_request ++
-//         queries.multi_cursor_query ++
-//         queries.xtversion ++
-//         queries.csi_u_query ++
-//         queries.kitty_graphics_query ++
-//         queries.primary_device_attrs);
-//
-//     try self.writer().flush();
-// }
-
 /// Queries the terminal capabilities and blocks, until primary device attributes response is found.
 pub fn query(stdin: std.fs.File, stdout: std.fs.File) error{ NoTty, ReadFailed, WriteFailed, EndOfStream }!TerminalCapabilities {
     try sendQuery(stdout);
