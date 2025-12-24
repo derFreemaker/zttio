@@ -13,6 +13,12 @@ pub fn build(b: *std.Build) void {
     });
     const uucode_mod = uucode_dep.module("uucode");
 
+    const zigimg_dep = b.dependency("zigimg", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const zigimg_mod = zigimg_dep.module("zigimg");
+
     const common_mod = b.addModule("common", .{
         .target = target,
         .optimize = optimize,
@@ -22,6 +28,7 @@ pub fn build(b: *std.Build) void {
         .imports = &.{
             .{ .name = "zigwin", .module = zigwin_mod },
             .{ .name = "uucode", .module = uucode_mod },
+            .{ .name = "zigimg", .module = zigimg_mod },
         },
     });
 
@@ -43,26 +50,28 @@ pub fn build(b: *std.Build) void {
             .{ .name = "common", .module = common_mod },
         },
     });
-    
+
     const zttio_mod = b.addModule("zttio", .{
         .target = target,
         .optimize = optimize,
-        
+
         .root_source_file = b.path("src/zttio.zig"),
-        
+
         .imports = &.{
+            .{ .name = "common", .module = common_mod },
+            
             .{ .name = "tty", .module = tty_mod },
         },
     });
-    
+
     const test_exe_mod = b.addModule("test_exe", .{
         .target = target,
         .optimize = optimize,
-        
+
         .root_source_file = b.path("src/test_exe.zig"),
-        
+
         .imports = &.{
-            .{ .name = "zttio", .module = zttio_mod },     
+            .{ .name = "zttio", .module = zttio_mod },
         },
     });
     const test_exe = b.addExecutable(.{
@@ -70,7 +79,7 @@ pub fn build(b: *std.Build) void {
         .root_module = test_exe_mod,
     });
     b.installArtifact(test_exe);
-    
+
     const tty_tests = b.addTest(.{
         .root_module = tty_mod,
     });

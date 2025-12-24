@@ -6,6 +6,7 @@ const common = @import("common");
 const Event = common.Event;
 const Queue = common.Queue;
 const Parser = @import("parser.zig");
+const Capabilities = @import("tty.zig").Capabilities;
 
 const InternalReader = if (builtin.os.tag == .windows)
     @import("reader/win_reader.zig")
@@ -57,6 +58,7 @@ pub fn deinit(self: *Reader, allocator: std.mem.Allocator) void {
     self.paste_buf.deinit(self.allocator);
     self.buf.deinit(self.allocator);
 
+    //TODO: deinit added events which were not retrieved
     self.queue.deinit(allocator);
 }
 
@@ -147,11 +149,20 @@ fn parseBuf(self: *Reader, token_remaining: RemainingToken) !void {
     }
 
     const result = try self.parser.parse(self.buf.items);
+    defer {
+        if (result.n > 0) {
+            @memmove(self.buf.items[0 .. self.buf.items.len - result.n], self.buf.items[result.n..]);
+            self.buf.items.len -= result.n;
+
+            if (self.buf.items.len == 0) {
+                self.last_cp = 0;
+                self.break_state = .default;
+            }
+        }
+    }
+
     if (self.in_paste and result.parse != .paste_end) {
         try self.paste_buf.appendSlice(self.allocator, self.buf.items[0..result.n]);
-
-        @memmove(self.buf.items[0 .. self.buf.items.len - result.n], self.buf.items[result.n..]);
-        self.buf.items.len -= result.n;
         return;
     }
 
@@ -159,6 +170,25 @@ fn parseBuf(self: *Reader, token_remaining: RemainingToken) !void {
         .none => return,
         .skip => {},
         .event => |event| {
+            // if (event == .key_press and !self.caps.queries_done.load(.unordered)) {
+            //     const key = event.key_press;
+            // 
+            //     // Check for a cursor position response for our explicit width query. This will
+            //     // always be an F3 key with shift = true, and we must be looking for queries
+            //     if (key.matchExact(common.Key.f3, .{ .shift = true })) {
+            //         self.caps.explicit_width = true;
+            //         self.caps.unicode_width_method = .unicode;
+            //         return;
+            //     }
+            // 
+            //     // Check for a cursor position response for our scaled text query. This will
+            //     // always be an F3 key with alt = true, and we must be looking for queries
+            //     if (key.matchExact(common.Key.f3, .{ .alt = true })) {
+            //         self.caps.scaled_text = true;
+            //         return;
+            //     }
+            // }
+
             self.postEvent(try event.clone(self.event_allocator));
         },
 
@@ -177,16 +207,28 @@ fn parseBuf(self: *Reader, token_remaining: RemainingToken) !void {
             self.postEvent(event);
         },
 
-        //TODO: report capabilities
-        else => {},
-    }
-
-    @memmove(self.buf.items[0 .. self.buf.items.len - result.n], self.buf.items[result.n..]);
-    self.buf.items.len -= result.n;
-
-    if (self.buf.items.len == 0) {
-        self.last_cp = 0;
-        self.break_state = .default;
+        // .cap_kitty_keyboard => {
+        //     self.caps.kitty_keyboard = true;
+        // },
+        // .cap_kitty_graphics => {
+        //     self.caps.kitty_graphics = true;
+        // },
+        // .cap_unicode_width => {
+        //     self.caps.unicode_width_method = .unicode;
+        // },
+        // .cap_sgr_pixels => {
+        //     self.caps.sgr_pixels = true;
+        // },
+        // .cap_multi_cursor => {
+        //     self.caps.multi_cursor = true;
+        // },
+        // .cap_color_scheme_updates => {
+        //     self.caps.color_scheme_updates = true;
+        // },
+        // .cap_da1 => {
+        //     std.Thread.Futex.wake(&self.caps.query_futex, 10);
+        //     self.caps.queries_done.store(true, .unordered);
+        // },
     }
 }
 

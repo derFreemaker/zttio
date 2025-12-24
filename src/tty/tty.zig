@@ -2,8 +2,10 @@ const std = @import("std");
 const builin = @import("builtin");
 const common = @import("common");
 
+const ctlseqs = common.cltseqs;
 const RawMode = common.RawMode;
 const Event = common.Event;
+const TerminalCapabilities = common.TerminalCapabilities;
 const Reader = @import("reader.zig");
 
 const DebugAllocator = if (builin.mode == .Debug)
@@ -31,7 +33,10 @@ stdout_writer: std.fs.File.Writer,
 
 reader: Reader,
 
-pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, stdin: std.fs.File, stdout: std.fs.File) error{ OutOfMemory, NoTty, UnableToEnterRawMode, UnableToStartReader }!*Tty {
+opts: Options,
+caps: TerminalCapabilities,
+
+pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, stdin: std.fs.File, stdout: std.fs.File, opts: Options) error{ OutOfMemory, NoTty, UnableToEnterRawMode, UnableToStartReader, UnableToQueryTerminalCapabilities }!*Tty {
     if (!stdin.isTty()) return error.NoTty;
     const raw_mode = RawMode.enable(stdin.handle, stdout.handle) catch return error.UnableToEnterRawMode;
 
@@ -65,6 +70,9 @@ pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, st
     ptr.reader = try .init(ptr.allocator, event_allocator, stdin.handle, stdout.handle);
     errdefer ptr.reader.deinit(ptr.allocator);
 
+    ptr.opts = opts;
+    ptr.caps = common.TerminalCapabilities.query(stdin, stdout) catch return error.UnableToQueryTerminalCapabilities;
+
     ptr.reader.start() catch |err| switch (err) {
         error.OutOfMemory => return error.OutOfMemory,
         else => return error.UnableToStartReader,
@@ -94,9 +102,17 @@ pub inline fn nextEvent(self: *Tty) Event {
     return self.reader.nextEvent();
 }
 
-pub fn writer(self: *Tty) *std.Io.Writer {
+pub inline fn strWidth(self: *Tty, str: []const u8) usize {
+    return common.gwidth.gwidth(str, self.caps.unicode_width_method);
+}
+
+pub inline fn writer(self: *Tty) *std.Io.Writer {
     return &self.stdout_writer.interface;
 }
+
+pub const Options = struct {
+    kitty_keyboard_flags: common.Key.KittyFlags = .{},
+};
 
 test {
     _ = std.testing.refAllDeclsRecursive(@This());

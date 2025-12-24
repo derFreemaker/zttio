@@ -159,7 +159,7 @@ pub const Modifiers = packed struct(u8) {
     }
 };
 
-pub const KittyProtocFlags = packed struct(u5) {
+pub const KittyFlags = packed struct(u5) {
     disambiguate: bool = true,
     report_events: bool = false,
     report_alternate_keys: bool = true,
