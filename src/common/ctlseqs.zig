@@ -9,6 +9,7 @@ pub const DCS = ESC ++ "P";
 pub const OSC = ESC ++ "]";
 pub const APC = ESC ++ "_";
 pub const ST = ESC ++ "\\";
+pub const BEL = "\x07";
 
 pub const Queries = struct {
     pub const primary_device_attrs = CSI ++ "c";
@@ -27,6 +28,9 @@ pub const Queries = struct {
     pub const explicit_width_query = OSC ++ "66;w=1; " ++ ST;
     pub const scaled_text_query = OSC ++ "66;s=2; " ++ ST;
     pub const multi_cursor_query = CSI ++ "> q";
+
+    pub const xtgettcap_Smulx = DCS ++ "+q536D756C78" ++ BEL ++ ST;
+    pub const xtgettcap_Tc = DCS ++ "+q5463" ++ BEL ++ ST;
 };
 
 pub const Cursor = struct {

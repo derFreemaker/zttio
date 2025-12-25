@@ -53,7 +53,10 @@ pub fn sendQuery(stdout: std.fs.File) error{ NoTty, WriteFailed }!void {
     try writer.writeAll(ctlseqs.Screen.save ++
         ctlseqs.Cursor.save_position);
 
-    // TODO: XTGETTCAP queries ("RGB", "Smulx")
+    //TODO: XTGETTCAP ("Tc", "Smulx")
+    // try writer.writeAll(queries.xtgettcap_Smulx);
+    // try writer.writeAll(queries.xtgettcap_Tc);
+
     try writer.writeAll(queries.decrqm_focus ++
         queries.decrqm_sync ++
         queries.decrqm_sgr_pixels ++
@@ -80,7 +83,7 @@ pub fn sendQuery(stdout: std.fs.File) error{ NoTty, WriteFailed }!void {
         queries.scaled_text_query ++
         queries.cursor_position_request ++
         queries.multi_cursor_query ++
-        queries.xtversion ++
+        // queries.xtversion ++
         queries.kitty_keyboard_query ++
         queries.kitty_graphics_query ++
         queries.primary_device_attrs);
@@ -128,15 +131,17 @@ pub fn parseQueryResponses(stdin: std.fs.File) error{ ReadFailed, EndOfStream }!
         const byte = try reader.takeByte();
         buf[i] = byte;
         i += 1;
+        // if (byte == ctlseqs.ESC[0]) {
+        //     std.debug.print("b: <ESC>\n", .{});
+        // } else {
+        //     std.debug.print("b: {d} - '{c}'\n", .{ byte, byte });
+        // }
 
         if (i < 2) {
             continue;
         }
 
         const result = parse(buf[0..i], &caps);
-        if (result.done) {
-            break;
-        }
         if (result.n > 0) {
             // if (buf[0] == ctlseqs.ESC[0]) {
             //     std.debug.print("seq: <ESC>{s}\n", .{buf[1..result.n]});
@@ -147,13 +152,10 @@ pub fn parseQueryResponses(stdin: std.fs.File) error{ ReadFailed, EndOfStream }!
             @memmove(buf[0 .. i - result.n], buf[result.n..i]);
             i -= result.n;
         }
-    }
 
-    // flush input queue to remove responses after the primary device attributes response
-    if (builin.os.tag == .windows) {
-        _ = winconsole.FlushConsoleInputBuffer(stdin.handle);
-    } else {
-        _ = std.os.linux.ioctl(stdin.handle, std.os.linux.T.CFLSH, 0);
+        if (result.done) {
+            break;
+        }
     }
 
     return caps;

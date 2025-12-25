@@ -4,8 +4,8 @@ const std = @import("std");
 
 const MAX_BUFFER_SIZE = (std.math.maxInt(usize) / 2) - 1;
 
-pub fn Queue(comptime T: type, comptime n: usize) type {
-    if (n > MAX_BUFFER_SIZE) {
+pub fn Queue(comptime T: type, comptime QueueLen: usize) type {
+    if (QueueLen > MAX_BUFFER_SIZE) {
         @compileError("size too big");
     }
 
@@ -23,7 +23,7 @@ pub fn Queue(comptime T: type, comptime n: usize) type {
 
         pub fn init(allocator: std.mem.Allocator) error{OutOfMemory}!Self {
             return .{
-                .buf = try allocator.alloc(T, n),
+                .buf = try allocator.alloc(T, QueueLen),
             };
         }
 
@@ -104,7 +104,7 @@ pub fn Queue(comptime T: type, comptime n: usize) type {
             return self.isEmptyLH();
         }
 
-        inline fn isEmptyLH(self: Self) bool {
+        inline fn isEmptyLH(self: *const Self) bool {
             return self.push_idx == self.pop_idx;
         }
 
@@ -114,22 +114,50 @@ pub fn Queue(comptime T: type, comptime n: usize) type {
             return self.isFullLH();
         }
 
-        inline fn isFullLH(self: Self) bool {
-            return self.wrappedIdx(self.push_idx + self.buf.len) == self.pop_idx;
+        inline fn isFullLH(self: *const Self) bool {
+            return self.wrappedIdx(self.push_idx + QueueLen) == self.pop_idx;
         }
 
-        fn len(self: Self) usize {
-            const wrap_offset = 2 * self.buf.len * @intFromBool(self.push_idx < self.pop_idx);
+        fn len(self: *const Self) usize {
+            const wrap_offset = 2 * QueueLen * @intFromBool(self.push_idx < self.pop_idx);
             const adjusted_write_index = self.push_idx + wrap_offset;
             return adjusted_write_index - self.pop_idx;
         }
 
-        inline fn idxIntoBuf(self: Self, index: usize) usize {
-            return index % self.buf.len;
+        inline fn idxIntoBuf(_: *const Self, index: usize) usize {
+            return index % QueueLen;
         }
 
-        inline fn wrappedIdx(self: Self, index: usize) usize {
-            return index % (2 * self.buf.len);
+        inline fn wrappedIdx(_: *const Self, index: usize) usize {
+            return index % (2 * QueueLen);
         }
+
+        pub fn enqueued(self: *Self) Enqueued {
+            if (self.isEmpty()) {
+                return Enqueued{ .first = &[_]T{}, .second = &[_]T{} };
+            }
+
+            const pop_buf_idx = self.idxIntoBuf(self.pop_idx);
+            const push_buf_idx = self.idxIntoBuf(self.push_idx);
+
+            if (pop_buf_idx < push_buf_idx) {
+                // No wrap: all elements are contiguous
+                return .{
+                    .first = self.buf[pop_buf_idx..push_buf_idx],
+                    .second = &[_]T{},
+                };
+            } else {
+                // Wrapped: elements from pop_idx to end, then from start to push_idx
+                return .{
+                    .first = self.buf[pop_buf_idx..],
+                    .second = self.buf[0..push_buf_idx],
+                };
+            }
+        }
+
+        pub const Enqueued = struct {
+            first: []T,
+            second: []T,
+        };
     };
 }

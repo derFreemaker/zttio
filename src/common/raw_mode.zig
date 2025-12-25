@@ -38,7 +38,7 @@ pub fn disable(self: *RawMode) void {
 fn enableWindows(stdin: std.fs.File.Handle, stdout: std.fs.File.Handle) error{ InvalidHandle, Unexpected }!OrignalState {
     const input_raw_mode: WIN_CONSOLE_MODE_INPUT = .{
         .WINDOW_INPUT = 1, // resize events
-        // .MOUSE_INPUT = 1,
+        .MOUSE_INPUT = 1,
         .EXTENDED_FLAGS = 1, // allow mouse events
         .PROCESSED_INPUT = 0,
         .LINE_INPUT = 0,

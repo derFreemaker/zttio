@@ -1,7 +1,7 @@
 const std = @import("std");
 const zttio = @import("zttio");
 
-pub fn main() !void {
+pub fn main() !u8 {
     var gpa: std.heap.GeneralPurposeAllocator(.{
         .retain_metadata = true,
         .never_unmap = true,
@@ -10,10 +10,9 @@ pub fn main() !void {
     defer if (gpa.deinit() == .leak) @panic("leaks found");
     const allocator = gpa.allocator();
     const event_allocator = allocator;
-    
+
     const tty = try zttio.Tty.init(allocator, event_allocator, .stdin(), .stdout(), .{});
     defer tty.deinit();
-    std.debug.print("caps: {any}\n", .{tty.caps});
 
     while (true) {
         const event = tty.nextEvent();
@@ -29,4 +28,6 @@ pub fn main() !void {
             else => {},
         }
     }
+
+    return 0;
 }
