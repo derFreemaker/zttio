@@ -170,8 +170,8 @@ pub const Terminal = struct {
     pub const scaled_text_with_fractions = OSC ++ "66;s={d}:w={d}:n={d}:d={d}:v={d};{s}" ++ ST;
 
     // bracketed paste
-    pub const breaketed_paste_set = CSI ++ "?2004h";
-    pub const breaketed_paste_reset = CSI ++ "?2004l";
+    pub const braketed_paste_set = CSI ++ "?2004h";
+    pub const braketed_paste_reset = CSI ++ "?2004l";
 
     // color scheme updates
     pub const color_scheme_request = CSI ++ "?996n";
@@ -238,7 +238,7 @@ pub const Terminal = struct {
     };
 
     pub const clipboard_copy_x = OSC ++ "52;c;{s}" ++ ST;
-    pub fn clipboardCopy(writer: *std.Io.Writer, encoder_allocator: std.mem.Allocator, content: []const u8) !void {
+    pub fn copyToClipboard(writer: *std.Io.Writer, encoder_allocator: std.mem.Allocator, content: []const u8) !void {
         const encoder = std.base64.standard.Encoder;
 
         const size = encoder.calcSize(content.len);
@@ -250,9 +250,6 @@ pub const Terminal = struct {
     }
 
     pub const clipboard_request = OSC ++ "52;c;?" ++ ST;
-    pub fn clipboardRequest(writer: *std.Io.Writer) !void {
-        return writer.writeAll(clipboard_request);
-    }
 };
 
 pub const KittyGraphics = @import("kitty_graphics.zig");

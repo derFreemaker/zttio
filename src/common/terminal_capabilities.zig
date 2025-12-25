@@ -63,7 +63,7 @@ pub fn sendQuery(stdout: std.fs.File) error{ NoTty, WriteFailed }!void {
         queries.decrqm_unicode ++
         queries.decrqm_color_scheme ++
         ctlseqs.Terminal.in_band_resize_set ++
-        ctlseqs.Terminal.breaketed_paste_set ++
+        ctlseqs.Terminal.braketed_paste_set ++
 
         // Explicit width query. We send the cursor home, then do an explicit width command, then
         // query the position. If the parsed value is an F3 with shift, we support explicit width.

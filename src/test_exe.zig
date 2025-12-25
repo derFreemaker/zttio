@@ -14,6 +14,9 @@ pub fn main() !u8 {
     const tty = try zttio.Tty.init(allocator, event_allocator, .stdin(), .stdout(), .{});
     defer tty.deinit();
 
+    try tty.requestClipboard();
+    try tty.flush();
+    
     while (true) {
         const event = tty.nextEvent();
         defer event.deinit(event_allocator);

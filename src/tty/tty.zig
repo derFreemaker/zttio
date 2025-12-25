@@ -77,6 +77,9 @@ pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, st
         error.OutOfMemory => return error.OutOfMemory,
         else => return error.UnableToStartReader,
     };
+    
+    ptr.stdoutWriter().writeAll(ctlseqs.Terminal.braketed_paste_set) catch unreachable;
+    ptr.stdoutWriter().flush() catch unreachable;
 
     return ptr;
 }
@@ -85,7 +88,7 @@ pub fn deinit(self: *Tty) void {
     self.reader.deinit(self.allocator);
     self.raw_mode.disable();
 
-    self.writer().flush() catch {};
+    self.stdoutWriter().flush() catch {};
     self.allocator.free(self.stdout_writer_buf);
 
     if (builin.mode == .Debug) {
@@ -106,8 +109,18 @@ pub inline fn strWidth(self: *Tty, str: []const u8) usize {
     return common.gwidth.gwidth(str, self.caps.unicode_width_method);
 }
 
-pub inline fn writer(self: *Tty) *std.Io.Writer {
+pub inline fn stdoutWriter(self: *Tty) *std.Io.Writer {
     return &self.stdout_writer.interface;
+}
+
+pub inline fn flush(self: *Tty) error{WriteFailed}!void {
+    return self.stdoutWriter().flush();
+}
+
+pub fn requestClipboard(self: *Tty) error{WriteFailed}!void {
+    const writer = self.stdoutWriter();
+
+    try writer.writeAll(ctlseqs.Terminal.clipboard_request);
 }
 
 pub const Options = struct {

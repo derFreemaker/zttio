@@ -4,8 +4,8 @@ const std = @import("std");
 
 const MAX_BUFFER_SIZE = (std.math.maxInt(usize) / 2) - 1;
 
-pub fn Queue(comptime T: type, comptime QueueLen: usize) type {
-    if (QueueLen > MAX_BUFFER_SIZE) {
+pub fn Queue(comptime T: type, comptime queue_len: usize) type {
+    if (queue_len > MAX_BUFFER_SIZE) {
         @compileError("size too big");
     }
 
@@ -23,7 +23,7 @@ pub fn Queue(comptime T: type, comptime QueueLen: usize) type {
 
         pub fn init(allocator: std.mem.Allocator) error{OutOfMemory}!Self {
             return .{
-                .buf = try allocator.alloc(T, QueueLen),
+                .buf = try allocator.alloc(T, queue_len),
             };
         }
 
@@ -115,21 +115,21 @@ pub fn Queue(comptime T: type, comptime QueueLen: usize) type {
         }
 
         inline fn isFullLH(self: *const Self) bool {
-            return self.wrappedIdx(self.push_idx + QueueLen) == self.pop_idx;
+            return self.wrappedIdx(self.push_idx + queue_len) == self.pop_idx;
         }
 
         fn len(self: *const Self) usize {
-            const wrap_offset = 2 * QueueLen * @intFromBool(self.push_idx < self.pop_idx);
+            const wrap_offset = 2 * queue_len * @intFromBool(self.push_idx < self.pop_idx);
             const adjusted_write_index = self.push_idx + wrap_offset;
             return adjusted_write_index - self.pop_idx;
         }
 
         inline fn idxIntoBuf(_: *const Self, index: usize) usize {
-            return index % QueueLen;
+            return index % queue_len;
         }
 
         inline fn wrappedIdx(_: *const Self, index: usize) usize {
-            return index % (2 * QueueLen);
+            return index % (2 * queue_len);
         }
 
         pub fn enqueued(self: *Self) Enqueued {
