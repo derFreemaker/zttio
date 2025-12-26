@@ -28,6 +28,7 @@ focus: bool = false,
 kitty_keyboard: bool = false,
 kitty_graphics: bool = false,
 rgb: bool = false,
+smulx: bool = false,
 unicode_width_method: gwidth.Method = .wcwidth,
 sgr_pixels: bool = false,
 color_scheme_updates: bool = false,
@@ -52,10 +53,6 @@ pub fn sendQuery(stdout: std.fs.File) error{ NoTty, WriteFailed }!void {
 
     try writer.writeAll(ctlseqs.Screen.save ++
         ctlseqs.Cursor.save_position);
-
-    //TODO: XTGETTCAP ("Tc", "Smulx")
-    // try writer.writeAll(queries.xtgettcap_Smulx);
-    // try writer.writeAll(queries.xtgettcap_Tc);
 
     try writer.writeAll(queries.decrqm_focus ++
         queries.decrqm_sync ++
@@ -90,6 +87,7 @@ pub fn sendQuery(stdout: std.fs.File) error{ NoTty, WriteFailed }!void {
 
     try writer.writeAll(ctlseqs.Screen.restore ++
         ctlseqs.Cursor.restore_position);
+
     try writer.flush();
 }
 

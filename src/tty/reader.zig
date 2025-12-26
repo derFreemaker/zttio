@@ -6,9 +6,8 @@ const common = @import("common");
 const Event = common.Event;
 const Queue = common.Queue;
 const Parser = @import("parser.zig");
-const Capabilities = @import("tty.zig").Capabilities;
 
-const InternalReader = if (builtin.os.tag == .windows)
+pub const InternalReader = if (builtin.os.tag == .windows)
     @import("reader/win_reader.zig")
 else
     @compileError("not implemented");
@@ -57,7 +56,7 @@ pub fn deinit(self: *Reader, allocator: std.mem.Allocator) void {
 
     self.paste_buf.deinit(self.allocator);
     self.buf.deinit(self.allocator);
-    
+
     const enqueued = self.queue.enqueued();
     for (enqueued.first) |event| {
         event.deinit(self.event_allocator);

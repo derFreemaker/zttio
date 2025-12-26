@@ -14,13 +14,19 @@ pub fn main() !u8 {
     const tty = try zttio.Tty.init(allocator, event_allocator, .stdin(), .stdout(), .{});
     defer tty.deinit();
 
-    try tty.requestClipboard();
+    try tty.enableAndResetAlternativeScreen();
     try tty.flush();
-    
+
+    // try tty.setStyling(zttio.AnsiStyling{
+    //     .underline = .{ .style = .dashed, .color = .{ .c8 = .blue } },
+    //     .foreground = .{ .c8 = .blue },
+    // });
+    // try tty.flush();
+
     while (true) {
         const event = tty.nextEvent();
         defer event.deinit(event_allocator);
-        std.debug.print("{any}\n", .{event});
+        try tty.stdoutWriter().print("{any}\n", .{event});
 
         switch (event) {
             .key_press => |key| {
@@ -30,7 +36,12 @@ pub fn main() !u8 {
             },
             else => {},
         }
+        
+        try tty.flush();
     }
+
+    try tty.disableAlternativeScreen();
+    try tty.flush();
 
     return 0;
 }

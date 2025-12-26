@@ -28,9 +28,6 @@ pub const Queries = struct {
     pub const explicit_width_query = OSC ++ "66;w=1; " ++ ST;
     pub const scaled_text_query = OSC ++ "66;s=2; " ++ ST;
     pub const multi_cursor_query = CSI ++ "> q";
-
-    pub const xtgettcap_Smulx = DCS ++ "+q536D756C78" ++ BEL ++ ST;
-    pub const xtgettcap_Tc = DCS ++ "+q5463" ++ BEL ++ ST;
 };
 
 pub const Cursor = struct {
@@ -85,15 +82,15 @@ pub const Cursor = struct {
     pub const show_cursor = CSI ++ "?25h";
 
     pub const set_cursor_shape = CSI ++ "{d} q";
-    pub fn cursorShape(writer: *std.Io.Writer, shape: Shape) !void {
+    pub fn setCursorShape(writer: *std.Io.Writer, shape: Shape) !void {
         return writer.print(set_cursor_shape, .{@intFromEnum(shape)});
     }
     pub const Shape = enum(u8) {
-        blicking_block = 1,
+        blinking_block = 1,
         steady_block = 2,
         blinking_underline = 3,
         steady_underline = 4,
-        blicking_bar = 5,
+        blinking_bar = 5,
         steady_bar = 6,
     };
 };
@@ -111,11 +108,11 @@ pub const Erase = struct {
 };
 
 pub const Screen = struct {
-    pub const save = CSI ++ "47l";
-    pub const restore = CSI ++ "47h";
+    pub const save = CSI ++ "?47l";
+    pub const restore = CSI ++ "?47h";
 
-    pub const alternative_enable = CSI ++ "1049h";
-    pub const alternative_disable = CSI ++ "1049l";
+    pub const alternative_enable = CSI ++ "?1049h";
+    pub const alternative_disable = CSI ++ "?1049l";
 };
 
 pub const Hyperlink = struct {

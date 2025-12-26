@@ -15,7 +15,7 @@ underline: ?Underline = null,
 thickness: ?Thickness = null,
 attrs: ?Attributes = null,
 
-pub fn print(self: AnsiStyling, writer: anytype) !void {
+pub fn print(self: AnsiStyling, writer: *std.Io.Writer) !void {
     try writer.writeAll(CSI);
     var sep = ListSeparator.init(";");
 
@@ -38,13 +38,6 @@ pub fn print(self: AnsiStyling, writer: anytype) !void {
         try writer.writeAll(attrs.printAsArg(&buf));
     }
 
-    if (self.underline) |underline| {
-        try sep.print(writer);
-
-        var buf: [20]u8 = undefined;
-        try writer.writeAll(underline.printAsArg(&buf));
-    }
-
     if (self.foreground) |fg| {
         try sep.print(writer);
 
@@ -59,11 +52,23 @@ pub fn print(self: AnsiStyling, writer: anytype) !void {
         try writer.writeAll(bg.printAsArg(&buf, .background));
     }
 
-    return writer.writeByte('m');
+    try writer.writeByte('m');
+
+    if (self.underline) |underline| {
+        // we print a underline so that terminals which do not support
+        // colored/styled underlines at least show an underline
+        try writer.writeAll(CSI ++ "4m");
+
+        // wezterm seems to discard the escape sequence when finding an unknown number
+        if (underline.color != null or underline.style != .single) {
+            var buf: [20]u8 = undefined;
+            try writer.print(CSI ++ "{s}m", .{underline.printAsArg(&buf)});
+        }
+    }
 }
 
 // redirect
-pub fn format(self: AnsiStyling, writer: anytype) !void {
+pub fn format(self: AnsiStyling, writer: *std.Io.Writer) !void {
     return self.print(writer);
 }
 
@@ -84,7 +89,7 @@ pub const Layer = enum {
         return 38 + self.modifier();
     }
 
-    pub fn reset(self: Layer, writer: anytype) !void {
+    pub fn reset(self: Layer, writer: *std.Io.Writer) !void {
         return writer.print(CSI ++ "{d}m", .{self.index() + 1});
     }
 };
@@ -237,7 +242,6 @@ pub const Color = union(enum) {
     };
 };
 
-//TODO: color
 pub const Underline = struct {
     // Underlines
     // pub const ul_off = CSI ++ "24m"; // NOTE: this could be \x1b[4:0m but is not as widely supported
@@ -247,7 +251,7 @@ pub const Underline = struct {
     // pub const ul_dotted = CSI ++ "4:4m";
     // pub const ul_dashed = CSI ++ "4:5m";
 
-    pub const off = CSI ++ "24m"; // NOTE: this could be 'CSI 4:0m' but is not as widely supported
+    pub const reset = CSI ++ "24m"; // NOTE: this could be 'CSI 4:0m' but is not as widely supported
 
     color: ?Color = null,
     style: Style = .single,
@@ -267,7 +271,7 @@ pub const Underline = struct {
 
             i += color.printAsArg(buf[i..], .underline).len;
         }
-        
+
         return buf[0..i];
     }
 

@@ -2,9 +2,11 @@ const std = @import("std");
 const builin = @import("builtin");
 const common = @import("common");
 
+const AnsiStyling = common.AnsiStyling;
 const ctlseqs = common.cltseqs;
 const RawMode = common.RawMode;
 const Event = common.Event;
+const Winsize = common.Winsize;
 const TerminalCapabilities = common.TerminalCapabilities;
 const Reader = @import("reader.zig");
 
@@ -63,7 +65,7 @@ pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, st
         ptr.arena.allocator();
     ptr.event_allocator = event_allocator;
 
-    ptr.stdout_writer_buf = try ptr.allocator.alloc(u8, 4096);
+    ptr.stdout_writer_buf = try ptr.allocator.alloc(u8, 32 * 1024);
     errdefer ptr.allocator.free(ptr.stdout_writer_buf);
     ptr.stdout_writer = stdout.writer(@constCast(ptr.stdout_writer_buf));
 
@@ -77,7 +79,7 @@ pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, st
         error.OutOfMemory => return error.OutOfMemory,
         else => return error.UnableToStartReader,
     };
-    
+
     ptr.stdoutWriter().writeAll(ctlseqs.Terminal.braketed_paste_set) catch unreachable;
     ptr.stdoutWriter().flush() catch unreachable;
 
@@ -101,12 +103,16 @@ pub fn deinit(self: *Tty) void {
     allocator.destroy(self);
 }
 
-pub inline fn nextEvent(self: *Tty) Event {
-    return self.reader.nextEvent();
-}
-
 pub inline fn strWidth(self: *Tty, str: []const u8) usize {
     return common.gwidth.gwidth(str, self.caps.unicode_width_method);
+}
+
+pub fn getWinsize(self: *const Tty) Winsize {
+    return Reader.InternalReader.getWindowSize(self.stdout.handle) catch unreachable;
+}
+
+pub inline fn nextEvent(self: *Tty) Event {
+    return self.reader.nextEvent();
 }
 
 pub inline fn stdoutWriter(self: *Tty) *std.Io.Writer {
@@ -121,6 +127,83 @@ pub fn requestClipboard(self: *Tty) error{WriteFailed}!void {
     const writer = self.stdoutWriter();
 
     try writer.writeAll(ctlseqs.Terminal.clipboard_request);
+}
+
+pub fn saveScreen(self: *Tty) error{WriteFailed}!void {
+    const writer = self.stdoutWriter();
+
+    try writer.writeAll(ctlseqs.Screen.save);
+}
+
+pub fn restoreScreen(self: *Tty) error{WriteFailed}!void {
+    const writer = self.stdoutWriter();
+
+    try writer.writeAll(ctlseqs.Screen.restore);
+}
+
+pub fn clearScreen(self: *Tty) error{WriteFailed}!void {
+    const writer = self.stdoutWriter();
+
+    try writer.writeAll(ctlseqs.Erase.screen);
+}
+
+pub fn resetScreen(self: *Tty) error{WriteFailed}!void {
+    try self.clearScreen();
+    try self.moveCursor(.home);
+}
+
+pub fn enableAlternativeScreen(self: *Tty) error{WriteFailed}!void {
+    const writer = self.stdoutWriter();
+
+    try writer.writeAll(ctlseqs.Screen.alternative_enable);
+}
+
+pub fn disableAlternativeScreen(self: *Tty) error{WriteFailed}!void {
+    const writer = self.stdoutWriter();
+
+    try writer.writeAll(ctlseqs.Screen.alternative_disable);
+}
+
+pub fn enableAndResetAlternativeScreen(self: *Tty) error{WriteFailed}!void {
+    try self.enableAlternativeScreen();
+    try self.clearScreen();
+    try self.moveCursor(.home);
+}
+
+pub fn saveCursorPos(self: *Tty) error{WriteFailed}!void {
+    const writer = self.stdoutWriter();
+
+    try writer.writeAll(ctlseqs.Cursor.save_position);
+}
+
+pub fn restoreCursorPos(self: *Tty) error{WriteFailed}!void {
+    const writer = self.stdoutWriter();
+
+    try writer.writeAll(ctlseqs.Cursor.restore_position);
+}
+
+pub fn setCursorShape(self: *Tty, shape: ctlseqs.Cursor.Shape) error{WriteFailed}!void {
+    const writer = self.stdoutWriter();
+
+    try ctlseqs.Cursor.setCursorShape(writer, shape);
+}
+
+pub fn moveCursor(self: *Tty, move_cursor: MoveCursor) error{WriteFailed}!void {
+    const writer = self.stdoutWriter();
+
+    switch (move_cursor) {
+        .home => {
+            try writer.writeAll(ctlseqs.Cursor.home);
+        },
+    }
+}
+
+pub const MoveCursor = union(enum) {
+    home,
+};
+
+pub fn setStyling(self: *Tty, style: AnsiStyling) error{WriteFailed}!void {
+    return self.stdoutWriter().print("{f}", .{style});
 }
 
 pub const Options = struct {

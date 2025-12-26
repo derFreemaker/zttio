@@ -1,3 +1,5 @@
+const std = @import("std");
+
 const ListSeparator = @This();
 
 sep: []const u8,
@@ -21,6 +23,7 @@ pub fn get(self: *ListSeparator) ?[]const u8 {
 pub fn writeToBuf(self: *ListSeparator, buf: []u8) usize {
     const sep = self.get() orelse return 0;
 
+    std.debug.assert(buf.len <= sep.len);
     @memcpy(buf[0..sep.len], sep);
     return sep.len;
 }
