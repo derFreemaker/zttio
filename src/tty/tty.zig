@@ -2,7 +2,6 @@ const std = @import("std");
 const builin = @import("builtin");
 const common = @import("common");
 
-const AnsiStyling = common.Styling;
 const ctlseqs = common.cltseqs;
 const RawMode = common.RawMode;
 const Event = common.Event;
@@ -202,7 +201,7 @@ pub const MoveCursor = union(enum) {
     home,
 };
 
-pub fn setStyling(self: *Tty, style: AnsiStyling) error{WriteFailed}!void {
+pub fn setStyling(self: *Tty, style: common.Styling) error{WriteFailed}!void {
     return self.stdoutWriter().print("{f}", .{style});
 }
 
