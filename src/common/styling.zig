@@ -5,7 +5,7 @@ const ListSeparator = @import("list_separator.zig");
 
 pub const reset = CSI ++ "0m";
 
-const AnsiStyling = @This();
+const Styling = @This();
 
 inherit: bool = false,
 
@@ -15,7 +15,7 @@ underline: ?Underline = null,
 thickness: ?Thickness = null,
 attrs: ?Attributes = null,
 
-pub fn print(self: AnsiStyling, writer: *std.Io.Writer) !void {
+pub fn print(self: Styling, writer: *std.Io.Writer) !void {
     try writer.writeAll(CSI);
     var sep = ListSeparator.init(";");
 
@@ -27,10 +27,10 @@ pub fn print(self: AnsiStyling, writer: *std.Io.Writer) !void {
 
     if (self.thickness) |thickness| {
         try sep.print(writer);
-
+        
         try writer.print("{d}", .{@intFromEnum(thickness)});
     }
-
+    
     if (self.attrs) |attrs| {
         try sep.print(writer);
 
@@ -53,7 +53,7 @@ pub fn print(self: AnsiStyling, writer: *std.Io.Writer) !void {
     }
 
     try writer.writeByte('m');
-
+    
     if (self.underline) |underline| {
         // we print a underline so that terminals which do not support
         // colored/styled underlines at least show an underline
@@ -68,7 +68,7 @@ pub fn print(self: AnsiStyling, writer: *std.Io.Writer) !void {
 }
 
 // redirect
-pub fn format(self: AnsiStyling, writer: *std.Io.Writer) !void {
+pub fn format(self: Styling, writer: *std.Io.Writer) !void {
     return self.print(writer);
 }
 
@@ -94,11 +94,11 @@ pub const Layer = enum {
     }
 };
 
-pub const Thickness = enum {
+pub const Thickness = enum(u2) {
     pub const reset = CSI ++ "22m";
 
-    bold,
-    dim,
+    bold = 1,
+    dim = 2,
 };
 
 pub const Attributes = struct {

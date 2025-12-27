@@ -2,7 +2,7 @@ const common = @import("common");
 
 pub const ctlseqs = common.cltseqs;
 pub const TermainlCapabilities = common.TerminalCapabilities;
-pub const AnsiStyling = common.AnsiStyling;
+pub const Styling = common.Styling;
 
 pub const Key = common.Key;
 

@@ -17,11 +17,11 @@ pub fn main() !u8 {
     try tty.enableAndResetAlternativeScreen();
     try tty.flush();
 
-    // try tty.setStyling(zttio.AnsiStyling{
-    //     .underline = .{ .style = .dashed, .color = .{ .c8 = .blue } },
-    //     .foreground = .{ .c8 = .blue },
-    // });
-    // try tty.flush();
+    try tty.setStyling(.{
+        .underline = .{ .style = .dashed, .color = .{ .c8 = .blue } },
+        .foreground = .{ .c8 = .blue },
+        .thickness = .bold,
+    });
 
     while (true) {
         const event = tty.nextEvent();
@@ -36,7 +36,7 @@ pub fn main() !u8 {
             },
             else => {},
         }
-        
+
         try tty.flush();
     }
 

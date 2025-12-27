@@ -2,7 +2,7 @@ const std = @import("std");
 const builin = @import("builtin");
 const common = @import("common");
 
-const AnsiStyling = common.AnsiStyling;
+const AnsiStyling = common.Styling;
 const ctlseqs = common.cltseqs;
 const RawMode = common.RawMode;
 const Event = common.Event;
