@@ -17,16 +17,10 @@ pub fn main() !u8 {
     try tty.enableAndResetAlternativeScreen();
     try tty.flush();
 
-    try tty.setStyling(.{
-        .underline = .{ .style = .dashed, .color = .{ .c8 = .blue } },
-        .foreground = .{ .c8 = .blue },
-        .thickness = .bold,
-    });
-
     while (true) {
         const event = tty.nextEvent();
         defer event.deinit(event_allocator);
-        try tty.stdoutWriter().print("{any}\n", .{event});
+        try tty.stdout.print("{any}\n", .{event});
 
         switch (event) {
             .key_press => |key| {

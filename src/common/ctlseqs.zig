@@ -34,8 +34,8 @@ pub const Cursor = struct {
     pub const home = CSI ++ "H";
 
     pub const move_to_line_column = CSI ++ "{d};{d}H";
-    pub fn moveTo(writer: *std.Io.Writer, line: usize, column: usize) !void {
-        return writer.print(move_to_line_column, .{ line, column });
+    pub fn moveTo(writer: *std.Io.Writer, row: usize, column: usize) !void {
+        return writer.print(move_to_line_column, .{ row, column });
     }
 
     pub const move_up_x = CSI ++ "{d}A";

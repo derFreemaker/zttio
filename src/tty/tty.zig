@@ -20,8 +20,8 @@ else
 
 const Tty = @This();
 
-stdin: std.fs.File,
-stdout: std.fs.File,
+stdin_handle: std.fs.File.Handle,
+stdout_handle: std.fs.File.Handle,
 raw_mode: RawMode,
 
 arena: std.heap.ArenaAllocator,
@@ -31,6 +31,7 @@ event_allocator: std.mem.Allocator,
 
 stdout_writer_buf: []const u8,
 stdout_writer: std.fs.File.Writer,
+stdout: *std.Io.Writer,
 
 reader: Reader,
 
@@ -44,8 +45,8 @@ pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, st
     const ptr = try allocator.create(Tty);
     errdefer allocator.destroy(ptr);
 
-    ptr.stdin = stdin;
-    ptr.stdout = stdout;
+    ptr.stdin_handle = stdin.handle;
+    ptr.stdout_handle = stdout.handle;
     ptr.raw_mode = raw_mode;
 
     ptr.arena = .init(allocator);
@@ -67,6 +68,7 @@ pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, st
     ptr.stdout_writer_buf = try ptr.allocator.alloc(u8, 32 * 1024);
     errdefer ptr.allocator.free(ptr.stdout_writer_buf);
     ptr.stdout_writer = stdout.writer(@constCast(ptr.stdout_writer_buf));
+    ptr.stdout = &ptr.stdout_writer.interface;
 
     ptr.reader = try .init(ptr.allocator, event_allocator, stdin.handle, stdout.handle);
     errdefer ptr.reader.deinit(ptr.allocator);
@@ -79,8 +81,8 @@ pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, st
         else => return error.UnableToStartReader,
     };
 
-    ptr.stdoutWriter().writeAll(ctlseqs.Terminal.braketed_paste_set) catch unreachable;
-    ptr.stdoutWriter().flush() catch unreachable;
+    ptr.stdout.writeAll(ctlseqs.Terminal.braketed_paste_set) catch unreachable;
+    ptr.stdout.flush() catch unreachable;
 
     return ptr;
 }
@@ -89,7 +91,7 @@ pub fn deinit(self: *Tty) void {
     self.reader.deinit(self.allocator);
     self.raw_mode.disable();
 
-    self.stdoutWriter().flush() catch {};
+    self.stdout.flush() catch {};
     self.allocator.free(self.stdout_writer_buf);
 
     if (builin.mode == .Debug) {
@@ -107,43 +109,31 @@ pub inline fn strWidth(self: *Tty, str: []const u8) usize {
 }
 
 pub fn getWinsize(self: *const Tty) Winsize {
-    return Reader.InternalReader.getWindowSize(self.stdout.handle) catch unreachable;
+    return Reader.InternalReader.getWindowSize(self.stdout_handle) catch @panic("unable to get winsize");
 }
 
 pub inline fn nextEvent(self: *Tty) Event {
     return self.reader.nextEvent();
 }
 
-pub inline fn stdoutWriter(self: *Tty) *std.Io.Writer {
-    return &self.stdout_writer.interface;
-}
-
-pub inline fn flush(self: *Tty) error{WriteFailed}!void {
-    return self.stdoutWriter().flush();
+pub inline fn flush(self: *Tty) !void {
+    return self.stdout.flush();
 }
 
 pub fn requestClipboard(self: *Tty) error{WriteFailed}!void {
-    const writer = self.stdoutWriter();
-
-    try writer.writeAll(ctlseqs.Terminal.clipboard_request);
+    try self.stdout.writeAll(ctlseqs.Terminal.clipboard_request);
 }
 
 pub fn saveScreen(self: *Tty) error{WriteFailed}!void {
-    const writer = self.stdoutWriter();
-
-    try writer.writeAll(ctlseqs.Screen.save);
+    try self.stdout.writeAll(ctlseqs.Screen.save);
 }
 
 pub fn restoreScreen(self: *Tty) error{WriteFailed}!void {
-    const writer = self.stdoutWriter();
-
-    try writer.writeAll(ctlseqs.Screen.restore);
+    try self.stdout.writeAll(ctlseqs.Screen.restore);
 }
 
 pub fn clearScreen(self: *Tty) error{WriteFailed}!void {
-    const writer = self.stdoutWriter();
-
-    try writer.writeAll(ctlseqs.Erase.screen);
+    try self.stdout.writeAll(ctlseqs.Erase.screen);
 }
 
 pub fn resetScreen(self: *Tty) error{WriteFailed}!void {
@@ -152,15 +142,11 @@ pub fn resetScreen(self: *Tty) error{WriteFailed}!void {
 }
 
 pub fn enableAlternativeScreen(self: *Tty) error{WriteFailed}!void {
-    const writer = self.stdoutWriter();
-
-    try writer.writeAll(ctlseqs.Screen.alternative_enable);
+    try self.stdout.writeAll(ctlseqs.Screen.alternative_enable);
 }
 
 pub fn disableAlternativeScreen(self: *Tty) error{WriteFailed}!void {
-    const writer = self.stdoutWriter();
-
-    try writer.writeAll(ctlseqs.Screen.alternative_disable);
+    try self.stdout.writeAll(ctlseqs.Screen.alternative_disable);
 }
 
 pub fn enableAndResetAlternativeScreen(self: *Tty) error{WriteFailed}!void {
@@ -170,39 +156,74 @@ pub fn enableAndResetAlternativeScreen(self: *Tty) error{WriteFailed}!void {
 }
 
 pub fn saveCursorPos(self: *Tty) error{WriteFailed}!void {
-    const writer = self.stdoutWriter();
-
-    try writer.writeAll(ctlseqs.Cursor.save_position);
+    try self.stdout.writeAll(ctlseqs.Cursor.save_position);
 }
 
 pub fn restoreCursorPos(self: *Tty) error{WriteFailed}!void {
-    const writer = self.stdoutWriter();
-
-    try writer.writeAll(ctlseqs.Cursor.restore_position);
+    try self.stdout.writeAll(ctlseqs.Cursor.restore_position);
 }
 
 pub fn setCursorShape(self: *Tty, shape: ctlseqs.Cursor.Shape) error{WriteFailed}!void {
-    const writer = self.stdoutWriter();
-
-    try ctlseqs.Cursor.setCursorShape(writer, shape);
+    try ctlseqs.Cursor.setCursorShape(self.stdout, shape);
 }
 
 pub fn moveCursor(self: *Tty, move_cursor: MoveCursor) error{WriteFailed}!void {
-    const writer = self.stdoutWriter();
+    const cursor = ctlseqs.Cursor;
 
     switch (move_cursor) {
         .home => {
-            try writer.writeAll(ctlseqs.Cursor.home);
+            try self.stdout.writeAll(cursor.home);
+        },
+        .pos => |pos| {
+            try cursor.moveTo(self.stdout, pos.row, pos.column);
+        },
+        .up => |x| {
+            try cursor.moveUp(self.stdout, x);
+        },
+        .down => |x| {
+            try cursor.moveDown(self.stdout, x);
+        },
+        .left => |x| {
+            try cursor.moveLeft(self.stdout, x);
+        },
+        .right => |x| {
+            try cursor.moveRight(self.stdout, x);
+        },
+        .front_up => |x| {
+            try cursor.moveFrontUp(self.stdout, x);
+        },
+        .front_down => |x| {
+            try cursor.moveFrontDown(self.stdout, x);
+        },
+        .column => |x| {
+            try cursor.moveToColumn(self.stdout, x);
+        },
+        .up_scroll_if_needed => {
+            try self.stdout.writeAll(cursor.move_up_scroll_if_needed);
         },
     }
 }
 
 pub const MoveCursor = union(enum) {
     home,
+    pos: Pos,
+    up: u16,
+    down: u16,
+    left: u16,
+    right: u16,
+    front_up: u16,
+    front_down: u16,
+    column: u16,
+    up_scroll_if_needed,
+
+    pub const Pos = struct {
+        row: u16,
+        column: u16,
+    };
 };
 
 pub fn setStyling(self: *Tty, style: common.Styling) error{WriteFailed}!void {
-    return self.stdoutWriter().print("{f}", .{style});
+    return self.stdout.print("{f}", .{style});
 }
 
 pub const Options = struct {
