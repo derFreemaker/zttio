@@ -1,4 +1,5 @@
 const std = @import("std");
+const assert = std.debug.assert;
 
 const ListSeparator = @import("list_separator.zig");
 const Key = @import("key.zig");
@@ -29,6 +30,8 @@ pub const Queries = struct {
     pub const scaled_text_query = OSC ++ "66;s=2; " ++ ST;
     pub const multi_cursor_query = CSI ++ "> q";
 };
+
+pub const Styling = @import("styling.zig");
 
 pub const Cursor = struct {
     pub const home = CSI ++ "H";
@@ -160,12 +163,7 @@ pub const Terminal = struct {
     // unicode
     pub const unicode_set = CSI ++ "?2027h";
     pub const unicode_reset = CSI ++ "?2027l";
-    pub const explicit_width = OSC ++ "66;w={d};{s}" ++ ST;
-
-    // text sizing
-    pub const scaled_text = OSC ++ "66;s={d}:w={d};{s}" ++ ST;
-    pub const scaled_text_with_fractions = OSC ++ "66;s={d}:w={d}:n={d}:d={d}:v={d};{s}" ++ ST;
-
+    
     // bracketed paste
     pub const braketed_paste_set = CSI ++ "?2004h";
     pub const braketed_paste_reset = CSI ++ "?2004l";
@@ -175,28 +173,15 @@ pub const Terminal = struct {
     pub const color_scheme_set = CSI ++ "?2031h";
     pub const color_scheme_reset = CSI ++ "?2031l";
 
-    pub const keyboard_handling_reset = CSI ++ "<u";
-    pub const keyboard_handling_set_x = CSI ++ ">{d}u";
-    pub fn setKeyboardHandling(writer: *std.Io.Writer, detail: Key.KittyFlags) !void {
+    // keyboard handling
+    pub const kitty_keyboard_handling_reset = CSI ++ "<u";
+    pub const kitty_keyboard_handling_set_x = CSI ++ ">{d}u";
+    pub fn setKittyKeyboardHandling(writer: *std.Io.Writer, detail: Key.KittyFlags) !void {
         const flag_int: u5 = @bitCast(detail);
-        return writer.print(keyboard_handling_set_x, .{flag_int});
+        return writer.print(kitty_keyboard_handling_set_x, .{flag_int});
     }
 
-    pub const title_set_x = OSC ++ "0;{s}" ++ ST;
-    pub fn setTitle(writer: *std.Io.Writer, title: []const u8) !void {
-        return writer.print(title_set_x, .{title});
-    }
-
-    pub const cd_uri_x = OSC ++ "7;{s}" ++ ST;
-    pub fn cdUri(writer: *std.Io.Writer, dir_uri: []const u8) !void {
-        return writer.print(cd_uri_x, .{dir_uri});
-    }
-
-    pub const cd_x = OSC ++ "7;file://{s}" ++ ST;
-    pub fn cd(writer: *std.Io.Writer, dir: []const u8) !void {
-        return writer.print(cd_x, .{dir});
-    }
-
+    // notify
     pub const notify_x = OSC ++ "9;{s}" ++ ST;
     pub const notify_title_x = OSC ++ "777;notify;{s};{s}" ++ ST;
     pub fn notify(writer: *std.Io.Writer, title: ?[]const u8, msg: []const u8) !void {
@@ -207,10 +192,11 @@ pub const Terminal = struct {
         return writer.print(notify_x, .{msg});
     }
 
-    pub const progress_type_x = OSC ++ "9;{d};{d}" ++ ST;
+    // progress
+    pub const progress_type_x = OSC ++ "9;4;{d};{d}" ++ ST;
     pub fn progress(writer: *std.Io.Writer, state: Progress) !void {
         switch (state) {
-            .default => return writer.print(progress_type_x, .{ 0, 0 }),
+            .none => return writer.print(progress_type_x, .{ 0, 0 }),
             .in_progress => |v| {
                 std.debug.assert(v <= 100);
                 return writer.print(progress_type_x, .{ 1, v });
@@ -227,13 +213,14 @@ pub const Terminal = struct {
         }
     }
     pub const Progress = union(enum) {
-        default,
+        none,
         in_progress: u8,
         in_error: u8,
         indeterminate,
         paused: u8,
     };
 
+    // clipboard
     pub const clipboard_copy_x = OSC ++ "52;c;{s}" ++ ST;
     pub fn copyToClipboard(writer: *std.Io.Writer, encoder_allocator: std.mem.Allocator, content: []const u8) !void {
         const encoder = std.base64.standard.Encoder;
@@ -247,9 +234,45 @@ pub const Terminal = struct {
     }
 
     pub const clipboard_request = OSC ++ "52;c;?" ++ ST;
+
+    // misc
+    pub const title_set_x = OSC ++ "0;{s}" ++ ST;
+    pub fn setTitle(writer: *std.Io.Writer, title: []const u8) !void {
+        return writer.print(title_set_x, .{title});
+    }
+
+    pub const cd_uri_x = OSC ++ "7;{s}" ++ ST;
+    pub fn cdUri(writer: *std.Io.Writer, dir_uri: []const u8) !void {
+        return writer.print(cd_uri_x, .{dir_uri});
+    }
+
+    pub const cd_x = OSC ++ "7;file://{s}" ++ ST;
+    pub fn cd(writer: *std.Io.Writer, dir: []const u8) !void {
+        return writer.print(cd_x, .{dir});
+    }
 };
 
-pub const KittyGraphics = @import("kitty_graphics.zig");
+pub const Text = struct {
+    // text sizing
+    pub const scaled_text = OSC ++ "66;s={d}:w={d};{s}" ++ ST;
+    pub fn scaled(writer: *std.Io.Writer, scale: u3, width: u3, content: []const u8) !void {
+        assert(1 <= scale);
+        return writer.print(scaled_text, .{ scale, width, content });
+    }
+
+    pub const scaled_text_with_fractions = OSC ++ "66;s={d}:w={d}:n={d}:d={d}:v={d};{s}" ++ ST;
+    pub fn scaledWithFractions(writer: *std.Io.Writer, scale: u3, width: u3, numerator: u4, denominator: u4, content: []const u8) !void {
+        assert(1 <= scale);
+        return writer.print(scaled_text_with_fractions, .{ scale, width, numerator, denominator, content });
+    }
+
+    pub const explicit_width = OSC ++ "66;w={d};{s}" ++ ST;
+    pub fn explicitWidth(writer: *std.Io.Writer, width: u3, content: []const u8) !void {
+        return writer.print(explicit_width, .{ width, content });
+    }
+};
+
+// pub const KittyGraphics = @import("kitty_graphics.zig");
 
 // Color control sequences
 // pub const osc4_query = "\x1b]4;{d};?\x1b\\"; // color index {d}

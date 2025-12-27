@@ -38,7 +38,7 @@ reader: Reader,
 opts: Options,
 caps: TerminalCapabilities,
 
-pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, stdin: std.fs.File, stdout: std.fs.File, opts: Options) error{ OutOfMemory, NoTty, UnableToEnterRawMode, UnableToStartReader, UnableToQueryTerminalCapabilities }!*Tty {
+pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, stdin: std.fs.File, stdout: std.fs.File, caps: ?TerminalCapabilities, opts: Options) error{ OutOfMemory, NoTty, UnableToEnterRawMode, UnableToStartReader, UnableToQueryTerminalCapabilities }!*Tty {
     if (!stdin.isTty()) return error.NoTty;
     const raw_mode = RawMode.enable(stdin.handle, stdout.handle) catch return error.UnableToEnterRawMode;
 
@@ -74,15 +74,26 @@ pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, st
     errdefer ptr.reader.deinit(ptr.allocator);
 
     ptr.opts = opts;
-    ptr.caps = common.TerminalCapabilities.query(stdin, stdout) catch return error.UnableToQueryTerminalCapabilities;
+    ptr.caps = caps orelse common.TerminalCapabilities.query(stdin, stdout) catch return error.UnableToQueryTerminalCapabilities;
 
     ptr.reader.start() catch |err| switch (err) {
         error.OutOfMemory => return error.OutOfMemory,
         else => return error.UnableToStartReader,
     };
 
-    ptr.stdout.writeAll(ctlseqs.Terminal.braketed_paste_set) catch unreachable;
-    ptr.stdout.flush() catch unreachable;
+    ptr.stdout.writeAll(ctlseqs.Terminal.braketed_paste_set) catch {};
+
+    if (ptr.caps.sgr_pixels) {
+        ptr.stdout.writeAll(ctlseqs.Terminal.mouse_set_pixels) catch {};
+    } else {
+        ptr.stdout.writeAll(ctlseqs.Terminal.mouse_set) catch {};
+    }
+
+    if (ptr.caps.kitty_keyboard) {
+        ctlseqs.Terminal.setKittyKeyboardHandling(ptr.stdout, opts.kitty_keyboard_flags) catch {};
+    }
+
+    ptr.stdout.flush() catch {};
 
     return ptr;
 }
@@ -124,6 +135,14 @@ pub fn requestClipboard(self: *Tty) error{WriteFailed}!void {
     try self.stdout.writeAll(ctlseqs.Terminal.clipboard_request);
 }
 
+pub fn notify(self: *Tty, title: ?[]const u8, msg: []const u8) !void {
+    try ctlseqs.Terminal.notify(self.stdout, title, msg);
+}
+
+pub fn setProgressIndicator(self: *Tty, state: ctlseqs.Terminal.Progress) !void {
+    try ctlseqs.Terminal.progress(self.stdout, state);
+}
+
 pub fn saveScreen(self: *Tty) error{WriteFailed}!void {
     try self.stdout.writeAll(ctlseqs.Screen.save);
 }
@@ -153,6 +172,19 @@ pub fn enableAndResetAlternativeScreen(self: *Tty) error{WriteFailed}!void {
     try self.enableAlternativeScreen();
     try self.clearScreen();
     try self.moveCursor(.home);
+}
+
+pub fn setMouseEvents(self: *Tty, enable: bool) error{WriteFailed}!void {
+    if (!enable) {
+        try self.stdout.writeAll(ctlseqs.Terminal.mouse_reset);
+        return;
+    }
+
+    if (self.caps.sgr_pixels) {
+        try self.stdout.writeAll(ctlseqs.Terminal.mouse_set_pixels);
+    } else {
+        try self.stdout.writeAll(ctlseqs.Terminal.mouse_set);
+    }
 }
 
 pub fn saveCursorPos(self: *Tty) error{WriteFailed}!void {
@@ -222,7 +254,7 @@ pub const MoveCursor = union(enum) {
     };
 };
 
-pub fn setStyling(self: *Tty, style: common.Styling) error{WriteFailed}!void {
+pub fn setStyling(self: *Tty, style: ctlseqs.Styling) error{WriteFailed}!void {
     return self.stdout.print("{f}", .{style});
 }
 

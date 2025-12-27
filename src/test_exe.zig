@@ -11,7 +11,7 @@ pub fn main() !u8 {
     const allocator = gpa.allocator();
     const event_allocator = allocator;
 
-    const tty = try zttio.Tty.init(allocator, event_allocator, .stdin(), .stdout(), .{});
+    const tty = try zttio.Tty.init(allocator, event_allocator, .stdin(), .stdout(), null, .{});
     defer tty.deinit();
 
     try tty.enableAndResetAlternativeScreen();
