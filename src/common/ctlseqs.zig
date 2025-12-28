@@ -256,9 +256,10 @@ pub const Text = struct {
     }
 
     pub const scaled_text_with_fractions = OSC ++ "66;s={d}:w={d}:n={d}:d={d}:v={d};{s}" ++ ST;
-    pub fn scaledWithFractions(writer: *std.Io.Writer, scale: u3, width: u3, numerator: u4, denominator: u4, content: []const u8) !void {
+    pub fn scaledWithFractions(writer: *std.Io.Writer, scale: u3, width: u3, numerator: u4, denominator: u4, vertical_align: u2, content: []const u8) !void {
         assert(1 <= scale);
-        return writer.print(scaled_text_with_fractions, .{ scale, width, numerator, denominator, content });
+        assert(vertical_align <= 2);
+        return writer.print(scaled_text_with_fractions, .{ scale, width, numerator, denominator, vertical_align, content });
     }
 
     pub const explicit_width = OSC ++ "66;w={d};{s}" ++ ST;

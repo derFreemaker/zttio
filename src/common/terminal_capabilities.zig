@@ -444,3 +444,65 @@ inline fn parseParam(comptime T: type, buf: []const u8, default: ?T) ?T {
     if (buf.len == 0) return default;
     return std.fmt.parseInt(T, buf, 10) catch return null;
 }
+
+const testing = std.testing;
+
+test "parse(csi): kitty multi cursor" {
+    {
+        var caps = TerminalCapabilities{};
+        const input = "\x1b[>1;2;3;29;30;40;100;101 q";
+        const result = parse(input, &caps);
+        const expected: ParseResult = .{
+            .n = input.len,
+        };
+
+        try testing.expectEqual(expected.n, result.n);
+        try testing.expect(caps.multi_cursor);
+    }
+    {
+        var caps = TerminalCapabilities{};
+        const input = "\x1b[> q";
+        const result = parse(input, &caps);
+        const expected: ParseResult = .skip(input.len);
+
+        try testing.expectEqual(expected.n, result.n);
+        try testing.expectEqual(caps, TerminalCapabilities{});
+    }
+}
+
+test "parse(csi): decrpm" {
+    {
+        var caps = TerminalCapabilities{};
+        const input = "\x1b[?1016;1$y";
+        const result = parse(input, &caps);
+        const expected: ParseResult = .{
+            .n = input.len,
+        };
+
+        try testing.expectEqual(expected.n, result.n);
+        try testing.expect(caps.sgr_pixels);
+    }
+    {
+        var caps = TerminalCapabilities{};
+        const input = "\x1b[?1016;0$y";
+        const result = parse(input, &caps);
+        const expected: ParseResult = .skip(input.len);
+
+        try testing.expectEqual(expected.n, result.n);
+        try testing.expectEqual(caps, TerminalCapabilities{});
+    }
+}
+
+test "parse(csi): primary da" {
+    var caps = TerminalCapabilities{};
+    const input = "\x1b[?c";
+    const result = parse(input, &caps);
+    const expected: ParseResult = .{
+        .n = input.len,
+        .done = true,
+    };
+
+    try testing.expectEqual(expected.n, result.n);
+    try testing.expectEqual(expected, result);
+    try testing.expectEqual(caps, TerminalCapabilities{});
+}

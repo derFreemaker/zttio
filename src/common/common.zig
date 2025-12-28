@@ -1,3 +1,8 @@
+const std = @import("std");
+test {
+    _ = std.testing.refAllDecls(@This());
+}
+
 pub const cltseqs = @import("ctlseqs.zig");
 pub const gwidth = @import("gwidth.zig");
 

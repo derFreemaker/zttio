@@ -324,5 +324,6 @@ pub const Options = struct {
 };
 
 test {
+    @setEvalBranchQuota(1_000_000);
     _ = std.testing.refAllDeclsRecursive(@This());
 }

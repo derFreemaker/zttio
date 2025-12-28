@@ -51,6 +51,11 @@ pub fn build(b: *std.Build) void {
         },
     });
 
+    const tty_tests = b.addTest(.{
+        .root_module = tty_mod,
+    });
+    const run_tty_tests = b.addRunArtifact(tty_tests);
+
     const zttio_mod = b.addModule("zttio", .{
         .target = target,
         .optimize = optimize,
@@ -59,7 +64,7 @@ pub fn build(b: *std.Build) void {
 
         .imports = &.{
             .{ .name = "common", .module = common_mod },
-            
+
             .{ .name = "tty", .module = tty_mod },
         },
     });
@@ -79,11 +84,6 @@ pub fn build(b: *std.Build) void {
         .root_module = test_exe_mod,
     });
     b.installArtifact(test_exe);
-
-    const tty_tests = b.addTest(.{
-        .root_module = tty_mod,
-    });
-    const run_tty_tests = b.addRunArtifact(tty_tests);
 
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_common_tests.step);
