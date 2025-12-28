@@ -20,7 +20,9 @@ pub fn main() !u8 {
     while (true) {
         const event = tty.nextEvent();
         defer event.deinit(event_allocator);
-        try tty.stdout.print("{any}\n", .{event});
+        
+        try tty.resetLine();
+        try tty.stdout.print("{any}", .{event});
 
         switch (event) {
             .key_press => |key| {

@@ -38,7 +38,7 @@ reader: Reader,
 opts: Options,
 caps: TerminalCapabilities,
 
-pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, stdin: std.fs.File, stdout: std.fs.File, caps: ?TerminalCapabilities, opts: Options) error{ OutOfMemory, NoTty, UnableToEnterRawMode, UnableToStartReader, UnableToQueryTerminalCapabilities }!*Tty {
+pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, stdin: std.fs.File, stdout: std.fs.File, caps: ?TerminalCapabilities, opts: Options) error{ OutOfMemory, NoTty, UnableToEnterRawMode, UnableToStartReader, UnableToQueryTerminalCapabilities, UnableToGetWinsize }!*Tty {
     if (!stdin.isTty()) return error.NoTty;
     const raw_mode = RawMode.enable(stdin.handle, stdout.handle) catch return error.UnableToEnterRawMode;
 
@@ -119,8 +119,8 @@ pub inline fn strWidth(self: *Tty, str: []const u8) usize {
     return common.gwidth.gwidth(str, self.caps.unicode_width_method);
 }
 
-pub fn getWinsize(self: *const Tty) Winsize {
-    return Reader.InternalReader.getWindowSize(self.stdout_handle) catch @panic("unable to get winsize");
+pub inline fn getWinsize(self: *const Tty) Winsize {
+    return self.reader.winsize;
 }
 
 pub inline fn nextEvent(self: *Tty) Event {
@@ -132,71 +132,98 @@ pub inline fn flush(self: *Tty) !void {
 }
 
 pub fn requestClipboard(self: *Tty) error{WriteFailed}!void {
-    try self.stdout.writeAll(ctlseqs.Terminal.clipboard_request);
+    return self.stdout.writeAll(ctlseqs.Terminal.clipboard_request);
 }
 
 pub fn notify(self: *Tty, title: ?[]const u8, msg: []const u8) !void {
-    try ctlseqs.Terminal.notify(self.stdout, title, msg);
+    return ctlseqs.Terminal.notify(self.stdout, title, msg);
 }
 
 pub fn setProgressIndicator(self: *Tty, state: ctlseqs.Terminal.Progress) !void {
-    try ctlseqs.Terminal.progress(self.stdout, state);
+    return ctlseqs.Terminal.progress(self.stdout, state);
+}
+
+pub fn setTitle(self: *Tty, title: []const u8) !void {
+    return ctlseqs.Terminal.setTitle(self.stdout, title);
+}
+
+pub fn changeCurrentWorkingDirectory(self: *Tty, path: []const u8) !void {
+    std.debug.assert(std.fs.path.isAbsolute(path));
+    return ctlseqs.Terminal.cd(self.stdout, path);
 }
 
 pub fn saveScreen(self: *Tty) error{WriteFailed}!void {
-    try self.stdout.writeAll(ctlseqs.Screen.save);
+    return self.stdout.writeAll(ctlseqs.Screen.save);
 }
 
 pub fn restoreScreen(self: *Tty) error{WriteFailed}!void {
-    try self.stdout.writeAll(ctlseqs.Screen.restore);
-}
-
-pub fn clearScreen(self: *Tty) error{WriteFailed}!void {
-    try self.stdout.writeAll(ctlseqs.Erase.screen);
+    return self.stdout.writeAll(ctlseqs.Screen.restore);
 }
 
 pub fn resetScreen(self: *Tty) error{WriteFailed}!void {
-    try self.clearScreen();
+    try self.clearScreen(.entire);
     try self.moveCursor(.home);
 }
 
+pub fn clearScreen(self: *Tty, mode: ClearScreenMode) error{WriteFailed}!void {
+    switch (mode) {
+        .entire => {
+            try self.clearScrollback();
+            return self.stdout.writeAll(ctlseqs.Erase.visible_screen);
+        },
+        .before_cursor => {
+            return self.stdout.writeAll(ctlseqs.Erase.screen_begin_to_cursor);
+        },
+        .after_cursor => {
+            return self.stdout.writeAll(ctlseqs.Erase.cursor_to_screen_end);
+        },
+    }
+}
+pub const ClearScreenMode = enum {
+    entire,
+    before_cursor,
+    after_cursor,
+};
+
+pub fn clearScrollback(self: *Tty) error{WriteFailed}!void {
+    return self.stdout.writeAll(ctlseqs.Erase.scroll_back);
+}
+
 pub fn enableAlternativeScreen(self: *Tty) error{WriteFailed}!void {
-    try self.stdout.writeAll(ctlseqs.Screen.alternative_enable);
+    return self.stdout.writeAll(ctlseqs.Screen.alternative_enable);
 }
 
 pub fn disableAlternativeScreen(self: *Tty) error{WriteFailed}!void {
-    try self.stdout.writeAll(ctlseqs.Screen.alternative_disable);
+    return self.stdout.writeAll(ctlseqs.Screen.alternative_disable);
 }
 
 pub fn enableAndResetAlternativeScreen(self: *Tty) error{WriteFailed}!void {
     try self.enableAlternativeScreen();
-    try self.clearScreen();
-    try self.moveCursor(.home);
+    try self.resetScreen();
 }
 
 pub fn setMouseEvents(self: *Tty, enable: bool) error{WriteFailed}!void {
     if (!enable) {
-        try self.stdout.writeAll(ctlseqs.Terminal.mouse_reset);
-        return;
+        return self.stdout.writeAll(ctlseqs.Terminal.mouse_reset);
     }
 
     if (self.caps.sgr_pixels) {
-        try self.stdout.writeAll(ctlseqs.Terminal.mouse_set_pixels);
+        return self.stdout.writeAll(ctlseqs.Terminal.mouse_set_pixels);
     } else {
-        try self.stdout.writeAll(ctlseqs.Terminal.mouse_set);
+        return self.stdout.writeAll(ctlseqs.Terminal.mouse_set);
     }
 }
 
 pub fn saveCursorPos(self: *Tty) error{WriteFailed}!void {
-    try self.stdout.writeAll(ctlseqs.Cursor.save_position);
+    return self.stdout.writeAll(ctlseqs.Cursor.save_position);
 }
 
 pub fn restoreCursorPos(self: *Tty) error{WriteFailed}!void {
-    try self.stdout.writeAll(ctlseqs.Cursor.restore_position);
+    return self.stdout.writeAll(ctlseqs.Cursor.restore_position);
 }
 
 pub fn setCursorShape(self: *Tty, shape: ctlseqs.Cursor.Shape) error{WriteFailed}!void {
-    try ctlseqs.Cursor.setCursorShape(self.stdout, shape);
+    return ctlseqs.Cursor.setCursorShape(self.stdout, shape);
 }
 
 pub fn moveCursor(self: *Tty, move_cursor: MoveCursor) error{WriteFailed}!void {
@@ -204,34 +231,41 @@ pub fn moveCursor(self: *Tty, move_cursor: MoveCursor) error{WriteFailed}!void {
 
     switch (move_cursor) {
         .home => {
-            try self.stdout.writeAll(cursor.home);
+            return self.stdout.writeAll(cursor.home);
         },
         .pos => |pos| {
-            try cursor.moveTo(self.stdout, pos.row, pos.column);
+            return cursor.moveTo(self.stdout, pos.row, pos.column);
         },
         .up => |x| {
-            try cursor.moveUp(self.stdout, x);
+            return cursor.moveUp(self.stdout, x);
         },
         .down => |x| {
-            try cursor.moveDown(self.stdout, x);
+            return cursor.moveDown(self.stdout, x);
         },
         .left => |x| {
-            try cursor.moveLeft(self.stdout, x);
+            return cursor.moveLeft(self.stdout, x);
         },
         .right => |x| {
-            try cursor.moveRight(self.stdout, x);
+            return cursor.moveRight(self.stdout, x);
         },
         .front_up => |x| {
-            try cursor.moveFrontUp(self.stdout, x);
+            return cursor.moveFrontUp(self.stdout, x);
         },
         .front_down => |x| {
-            try cursor.moveFrontDown(self.stdout, x);
+            return cursor.moveFrontDown(self.stdout, x);
         },
         .column => |x| {
-            try cursor.moveToColumn(self.stdout, x);
+            return cursor.moveToColumn(self.stdout, x);
         },
         .up_scroll_if_needed => {
-            try self.stdout.writeAll(cursor.move_up_scroll_if_needed);
+            return self.stdout.writeAll(cursor.move_up_scroll_if_needed);
+        },
+
+        .front => {
+            return self.moveCursor(.{ .column = 0 });
+        },
+        .end => {
+            return self.moveCursor(.{ .column = self.getWinsize().cols });
         },
     }
 }
@@ -248,6 +282,9 @@ pub const MoveCursor = union(enum) {
     column: u16,
     up_scroll_if_needed,
 
+    front,
+    end,
+
     pub const Pos = struct {
         row: u16,
         column: u16,
@@ -256,6 +293,30 @@ pub const MoveCursor = union(enum) {
 
 pub fn setStyling(self: *Tty, style: ctlseqs.Styling) error{WriteFailed}!void {
     return self.stdout.print("{f}", .{style});
+}
+
+pub fn clearLine(self: *Tty, mode: ClearLineMode) error{WriteFailed}!void {
+    switch (mode) {
+        .entire => {
+            return self.stdout.writeAll(ctlseqs.Erase.line);
+        },
+        .before_cursor => {
+            return self.stdout.writeAll(ctlseqs.Erase.line_begin_to_cursor);
+        },
+        .after_cursor => {
+            return self.stdout.writeAll(ctlseqs.Erase.cursor_to_line_end);
+        },
+    }
+}
+pub const ClearLineMode = enum {
+    entire,
+    before_cursor,
+    after_cursor,
+};
+
+pub fn resetLine(self: *Tty) error{WriteFailed}!void {
+    try self.clearLine(.entire);
+    try self.moveCursor(.front);
 }
 
 pub const Options = struct {

@@ -101,9 +101,9 @@ pub const Cursor = struct {
 pub const Erase = struct {
     pub const cursor_to_screen_end = CSI ++ "0J";
     pub const screen_begin_to_cursor = CSI ++ "1J";
-    pub const screen = CSI ++ "2J";
+    pub const visible_screen = CSI ++ "2J";
 
-    pub const saved_lines = CSI ++ "3J";
+    pub const scroll_back = CSI ++ "3J";
 
     pub const cursor_to_line_end = CSI ++ "0K";
     pub const line_begin_to_cursor = CSI ++ "1K";
@@ -163,7 +163,7 @@ pub const Terminal = struct {
     // unicode
     pub const unicode_set = CSI ++ "?2027h";
     pub const unicode_reset = CSI ++ "?2027l";
-    
+
     // bracketed paste
     pub const braketed_paste_set = CSI ++ "?2004h";
     pub const braketed_paste_reset = CSI ++ "?2004l";
@@ -239,11 +239,6 @@ pub const Terminal = struct {
     pub const title_set_x = OSC ++ "0;{s}" ++ ST;
     pub fn setTitle(writer: *std.Io.Writer, title: []const u8) !void {
         return writer.print(title_set_x, .{title});
-    }
-
-    pub const cd_uri_x = OSC ++ "7;{s}" ++ ST;
-    pub fn cdUri(writer: *std.Io.Writer, dir_uri: []const u8) !void {
-        return writer.print(cd_uri_x, .{dir_uri});
     }
 
     pub const cd_x = OSC ++ "7;file://{s}" ++ ST;

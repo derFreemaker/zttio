@@ -4,6 +4,7 @@ const uucode = @import("uucode");
 const common = @import("common");
 
 const Event = common.Event;
+const Winsize = common.Winsize;
 const Queue = common.Queue;
 const Parser = @import("parser.zig");
 
@@ -33,7 +34,9 @@ break_state: uucode.grapheme.BreakState = .default,
 
 queue: Queue(Event, 512),
 
-pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, stdin: std.fs.File.Handle, stdout: std.fs.File.Handle) error{OutOfMemory}!Reader {
+winsize: Winsize,
+
+pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, stdin: std.fs.File.Handle, stdout: std.fs.File.Handle) error{ OutOfMemory, UnableToGetWinsize }!Reader {
     return Reader{
         .allocator = allocator,
         .event_allocator = event_allocator,
@@ -46,6 +49,8 @@ pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, st
         .buf = .empty,
 
         .queue = try .init(allocator),
+
+        .winsize = InternalReader.getWindowSize(stdout) catch return error.UnableToGetWinsize,
     };
 }
 
@@ -82,6 +87,13 @@ pub fn stop(self: *Reader) void {
 }
 
 pub fn postEvent(self: *Reader, event: Event) void {
+    switch (event) {
+        .winsize => |winsize| {
+            self.winsize = winsize;
+        },
+        else => {},
+    }
+
     return self.queue.push(event);
 }
 
