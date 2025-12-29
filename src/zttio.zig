@@ -6,5 +6,6 @@ pub const Styling = common.Styling;
 
 pub const Key = common.Key;
 
+pub const RawMode = common.RawMode;
 pub const Tty = @import("tty");
 // pub const Pty = @import("pty");

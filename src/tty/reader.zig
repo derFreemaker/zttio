@@ -11,7 +11,7 @@ const Parser = @import("parser.zig");
 pub const InternalReader = if (builtin.os.tag == .windows)
     @import("reader/win_reader.zig")
 else
-    @compileError("not implemented");
+    @import("reader/posix_reader.zig");
 
 const Reader = @This();
 
@@ -50,7 +50,7 @@ pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, st
 
         .queue = try .init(allocator),
 
-        .winsize = InternalReader.getWindowSize(stdout) catch return error.UnableToGetWinsize,
+        .winsize = InternalReader.getWinsize(stdout) catch return error.UnableToGetWinsize,
     };
 }
 
@@ -58,7 +58,7 @@ pub fn deinit(self: *Reader, allocator: std.mem.Allocator) void {
     self.stop();
 
     self.parser.deinit();
-
+    
     self.paste_buf.deinit(self.allocator);
     self.buf.deinit(self.allocator);
 

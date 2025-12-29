@@ -4,7 +4,17 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const zigwin_mod = b.dependency("zigwin32", .{}).module("win32");
+    const zigwin_mod: ?*std.Build.Module = blk: {
+        if (target.result.os.tag != .windows) {
+            break :blk null;
+        }
+
+        if (b.lazyDependency("zigwin32", .{})) |zigwin32| {
+            break :blk zigwin32.module("win32");
+        }
+
+        break :blk null;
+    };
 
     const uucode_dep = b.dependency("uucode", .{
         .target = target,
@@ -26,16 +36,13 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/common/common.zig"),
 
         .imports = &.{
-            .{ .name = "zigwin", .module = zigwin_mod },
             .{ .name = "uucode", .module = uucode_mod },
             // .{ .name = "zigimg", .module = zigimg_mod },
         },
     });
-
-    const common_tests = b.addTest(.{
-        .root_module = common_mod,
-    });
-    const run_common_tests = b.addRunArtifact(common_tests);
+    if (zigwin_mod) |mod| {
+        common_mod.addImport("zigwin", mod);
+    }
 
     const tty_mod = b.addModule("tty", .{
         .target = target,
@@ -44,17 +51,23 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/tty/tty.zig"),
 
         .imports = &.{
-            .{ .name = "zigwin", .module = zigwin_mod },
             .{ .name = "uucode", .module = uucode_mod },
 
             .{ .name = "common", .module = common_mod },
         },
     });
+    if (zigwin_mod) |mod| {
+        common_mod.addImport("zigwin", mod);
+    }
 
-    const tty_tests = b.addTest(.{
-        .root_module = tty_mod,
-    });
-    const run_tty_tests = b.addRunArtifact(tty_tests);
+    if (target.result.os.tag == .windows) {
+        if (b.lazyDependency("zigwin32", .{})) |zigwin32| {
+            const mod = zigwin32.module("win32");
+
+            common_mod.addImport("zigwin", mod);
+            tty_mod.addImport("zigwin", mod);
+        }
+    }
 
     const zttio_mod = b.addModule("zttio", .{
         .target = target,
@@ -84,6 +97,16 @@ pub fn build(b: *std.Build) void {
         .root_module = test_exe_mod,
     });
     b.installArtifact(test_exe);
+
+    const common_tests = b.addTest(.{
+        .root_module = common_mod,
+    });
+    const run_common_tests = b.addRunArtifact(common_tests);
+
+    const tty_tests = b.addTest(.{
+        .root_module = tty_mod,
+    });
+    const run_tty_tests = b.addRunArtifact(tty_tests);
 
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_common_tests.step);

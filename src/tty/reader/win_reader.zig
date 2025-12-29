@@ -29,7 +29,7 @@ pub fn init(stdin: std.fs.File.Handle, stdout: std.fs.File.Handle) WinReader {
     };
 }
 
-pub fn getWindowSize(stdout_handle: std.fs.File.Handle) error{Unexpected}!Winsize {
+pub fn getWinsize(stdout_handle: std.fs.File.Handle) error{Unexpected}!Winsize {
     // NOTE: Even though the event comes with a size, it may not be accurate. We ask for
     // the size directly when we get this event
     var console_info: winconsole.CONSOLE_SCREEN_BUFFER_INFO = undefined;
@@ -48,7 +48,7 @@ pub fn getWindowSize(stdout_handle: std.fs.File.Handle) error{Unexpected}!Winsiz
     };
 }
 
-pub fn next(self: *WinReader, event_allocator: std.mem.Allocator) error{ OutOfMemory, ReadFailed }!?ReadResult {
+pub fn next(self: *WinReader, event_allocator: std.mem.Allocator) error{ OutOfMemory, ReadFailed, EOF }!?ReadResult {
     var utf16_buf: [2]u16 = undefined;
     var utf16_half: bool = false;
 
@@ -306,7 +306,7 @@ pub fn next(self: *WinReader, event_allocator: std.mem.Allocator) error{ OutOfMe
                 // NOTE: Even though the event comes with a size, it may not be accurate.
                 // We ask for the size directly when we get this event
                 return ReadResult{
-                    .event = .{ .winsize = getWindowSize(self.stdout) catch return error.ReadFailed },
+                    .event = .{ .winsize = getWinsize(self.stdout) catch return error.ReadFailed },
                 };
             },
             winconsole.FOCUS_EVENT => {

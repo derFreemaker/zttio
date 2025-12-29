@@ -28,10 +28,15 @@ Should be fine, since detection should be done before anything else.
 
 **Query:** CSI - ``?2027$p``
 
-### Color scheme Updates
+### [Color scheme Updates](https://github.com/contour-terminal/contour/blob/master/docs/vt-extensions/color-palette-update-notifications.md)
 **Pd:** ``2031``
 
 **Query:** CSI - ``?2031$p``
+
+### [In-Band Window Resize Notifications](https://gist.github.com/rockorager/e695fb2924d36b2bcf1fff4a3704bd83)
+**Pd:** ``2048``
+
+**Query:** CSI - ``?2048$p``
 
 ## [Explicit Width](https://sw.kovidgoyal.net/kitty/text-sizing-protocol)
 **Query:** OSC - ``66;w=1; `` - ST followed by [CPR](https://vt100.net/docs/vt510-rm/CPR.html)

@@ -1,5 +1,5 @@
 const std = @import("std");
-const builin = @import("builtin");
+const builtin = @import("builtin");
 const common = @import("common");
 
 const ctlseqs = common.cltseqs;
@@ -8,8 +8,9 @@ const Event = common.Event;
 const Winsize = common.Winsize;
 const TerminalCapabilities = common.TerminalCapabilities;
 const Reader = @import("reader.zig");
+const SigwinchHandling = @import("sigwinch_handling.zig");
 
-const DebugAllocator = if (builin.mode == .Debug)
+const DebugAllocator = if (builtin.mode == .Debug)
     std.heap.DebugAllocator(.{
         .never_unmap = true,
         .retain_metadata = true,
@@ -38,7 +39,7 @@ reader: Reader,
 opts: Options,
 caps: TerminalCapabilities,
 
-pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, stdin: std.fs.File, stdout: std.fs.File, caps: ?TerminalCapabilities, opts: Options) error{ OutOfMemory, NoTty, UnableToEnterRawMode, UnableToStartReader, UnableToQueryTerminalCapabilities, UnableToGetWinsize }!*Tty {
+pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, stdin: std.fs.File, stdout: std.fs.File, caps: ?TerminalCapabilities, opts: Options) error{ OutOfMemory, NoTty, UnableToEnterRawMode, UnableToQueryTerminalCapabilities, UnableToGetWinsize, UnableToStartReader }!*Tty {
     if (!stdin.isTty()) return error.NoTty;
     const raw_mode = RawMode.enable(stdin.handle, stdout.handle) catch return error.UnableToEnterRawMode;
 
@@ -50,16 +51,16 @@ pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, st
     ptr.raw_mode = raw_mode;
 
     ptr.arena = .init(allocator);
-    if (builin.mode == .Debug) {
+    if (builtin.mode == .Debug) {
         ptr.debug_allocator = DebugAllocator{
             .backing_allocator = ptr.arena.allocator(),
         };
     }
-    errdefer if (builin.mode == .Debug) {
+    errdefer if (builtin.mode == .Debug) {
         if (ptr.debug_allocator.deinit() == .leak)
             @panic("leaks found in tty");
     };
-    ptr.allocator = if (builin.mode == .Debug)
+    ptr.allocator = if (builtin.mode == .Debug)
         ptr.debug_allocator.allocator()
     else
         ptr.arena.allocator();
@@ -81,36 +82,65 @@ pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, st
         else => return error.UnableToStartReader,
     };
 
-    ptr.stdout.writeAll(ctlseqs.Terminal.braketed_paste_set ++
-        ctlseqs.Terminal.in_band_resize_set) catch {};
-
+    ptr.stdout.writeAll(ctlseqs.Terminal.braketed_paste_set) catch {};
+    if (ptr.caps.in_band_winsize) {
+        ptr.stdout.writeAll(ctlseqs.Terminal.in_band_resize_set) catch {};
+    }
     if (ptr.caps.sgr_pixels) {
         ptr.stdout.writeAll(ctlseqs.Terminal.mouse_set_pixels) catch {};
     } else {
         ptr.stdout.writeAll(ctlseqs.Terminal.mouse_set) catch {};
     }
-
     if (ptr.caps.kitty_keyboard) {
         ctlseqs.Terminal.setKittyKeyboardHandling(ptr.stdout, opts.kitty_keyboard_flags) catch {};
     }
-
     ptr.stdout.flush() catch {};
+
+    switch (builtin.os.tag) {
+        .windows => {},
+        else => {
+            if (!builtin.is_test and !ptr.caps.in_band_winsize) {
+                try SigwinchHandling.notifyWinsize(.{
+                    .context = ptr,
+                    .callback = struct {
+                        pub fn call(context: *anyopaque) void {
+                            const self: *Tty = @ptrCast(@alignCast(context));
+                            const winsize = Reader.InternalReader.getWinsize(self.stdin_handle) catch return;
+                            self.reader.postEvent(.{ .winsize = winsize });
+                        }
+                    }.call,
+                });
+            }
+        },
+    }
 
     return ptr;
 }
 
 pub fn deinit(self: *Tty) void {
+    switch (builtin.os.tag) {
+        .windows => {},
+        else => {
+            if (!builtin.is_test) {
+                SigwinchHandling.removeNotifyWinsize(self);
+            }
+        },
+    }
+
     self.reader.deinit(self.allocator);
     self.raw_mode.disable();
 
+    self.stdout.writeAll(ctlseqs.Terminal.braketed_paste_reset ++ ctlseqs.Terminal.mouse_reset) catch {};
+    if (self.caps.in_band_winsize) {
+        self.stdout.writeAll(ctlseqs.Terminal.in_band_resize_reset) catch {};
+    }
     self.stdout.flush() catch {};
     self.allocator.free(self.stdout_writer_buf);
 
-    if (builin.mode == .Debug) {
+    if (builtin.mode == .Debug) {
         if (self.debug_allocator.deinit() == .leak)
             @panic("leaks found in tty");
     }
-
     const allocator = self.arena.child_allocator;
     self.arena.deinit();
     allocator.destroy(self);

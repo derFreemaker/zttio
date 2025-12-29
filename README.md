@@ -31,13 +31,6 @@ from [libvaxis](https://github.com/rockorager/libvaxis/tree/11f53c701ae6b5633582
 [//]: # (- [Explicit Width]&#40;https://github.com/kovidgoyal/kitty/blob/master/docs/text-sizing-protocol.rst&#41;)
 [//]: # (- Images &#40;kitty, sixel, ...&#41;)
 
-## TODO
-
-- linux support
-- incremental parsing of escape sequences
-- graphics support for kitty, sixel, ...
-- more escape codes support
-
 ## Dependencies
 
 - [zigwin32](https://github.com/marlersoft/zigwin32)

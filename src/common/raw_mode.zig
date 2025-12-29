@@ -8,20 +8,17 @@ const windows = std.os.windows;
 const OrignalState = if (builtin.os.tag == .windows)
     WindowsState
 else
-    // PosixState;
-    @compileError("not implemented");
+    PosixState;
 
 const RawMode = @This();
 
 original_state: ?OrignalState,
 
 pub fn enable(stdin: std.fs.File.Handle, stdout: std.fs.File.Handle) error{ InvalidHandle, Unexpected }!RawMode {
-    return RawMode{
-        .original_state = if (builtin.os.tag == .windows)
-            try enableWindows(stdin, stdout)
-        else
-            @compileError("not implemented"),
-    };
+    return RawMode{ .original_state = if (builtin.os.tag == .windows)
+        try enableWindows(stdin, stdout)
+    else
+        try enablePosix(stdin) };
 }
 
 pub fn disable(self: *RawMode) void {
@@ -30,8 +27,7 @@ pub fn disable(self: *RawMode) void {
     if (builtin.os.tag == .windows) {
         disableWindows(org_state);
     } else {
-        @compileError("not implemented");
-        // disablePosix(state);
+        disablePosix(org_state);
     }
 }
 
@@ -49,7 +45,6 @@ fn enableWindows(stdin: std.fs.File.Handle, stdout: std.fs.File.Handle) error{ I
     const output_raw_mode: WIN_CONSOLE_MODE_OUTPUT = .{
         .PROCESSED_OUTPUT = 1,
         .VIRTUAL_TERMINAL_PROCESSING = 1,
-        // .ENABLE_LVB_GRID_WORLDWIDE = 1,
     };
 
     const org_codepage = winconsole.GetConsoleOutputCP();
@@ -121,32 +116,37 @@ pub fn setConsoleMode(handle: std.os.windows.HANDLE, mode: anytype) !void {
     };
 }
 
-// fn enablePosix() !void {
-//     const stdin_fd = std.posix.STDIN_FILENO;
-//     const original = try std.posix.tcgetattr(stdin_fd);
-//
-//     var raw = original;
-//     raw.lflag.ECHO = false;
-//     raw.lflag.ICANON = false;
-//     raw.lflag.ISIG = false;
-//     raw.lflag.IEXTEN = false;
-//     raw.iflag.IXON = false;
-//     raw.iflag.ICRNL = false;
-//     raw.iflag.BRKINT = false;
-//     raw.iflag.INPCK = false;
-//     raw.iflag.ISTRIP = false;
-//     raw.oflag.OPOST = false;
-//     raw.cc[@intFromEnum(std.posix.V.TIME)] = 0;
-//     raw.cc[@intFromEnum(std.posix.V.MIN)] = 1;
-//
-//     try std.posix.tcsetattr(stdin_fd, .FLUSH, raw);
-//
-//     original_state = .{ .termios = original };
-// }
+fn enablePosix(stdin_fd: std.posix.fd_t) error{ InvalidHandle, Unexpected }!OrignalState {
+    const original = std.posix.tcgetattr(stdin_fd) catch |err| switch (err) {
+        error.NotATerminal => return error.InvalidHandle,
+        else => return error.Unexpected,
+    };
 
-// fn disablePosix(state: PosixState) void {
-//     std.posix.tcsetattr(std.posix.STDIN_FILENO, .FLUSH, state.termios) catch {};
-// }
+    var raw = original;
+    raw.lflag.ECHO = false;
+    raw.lflag.ICANON = false;
+    raw.lflag.ISIG = false;
+    raw.lflag.IEXTEN = false;
+    raw.iflag.IXON = false;
+    raw.iflag.ICRNL = false;
+    raw.iflag.BRKINT = false;
+    raw.iflag.INPCK = false;
+    raw.iflag.ISTRIP = false;
+    raw.oflag.OPOST = true;
+    raw.cc[@intFromEnum(std.posix.V.TIME)] = 0;
+    raw.cc[@intFromEnum(std.posix.V.MIN)] = 0;
+
+    std.posix.tcsetattr(stdin_fd, .FLUSH, raw) catch |err| switch (err) {
+        error.NotATerminal => return error.InvalidHandle,
+        else => return error.Unexpected,
+    };
+
+    return .{ .termios = original };
+}
+
+fn disablePosix(state: PosixState) void {
+    std.posix.tcsetattr(std.posix.STDIN_FILENO, .FLUSH, state.termios) catch |err| @panic(@errorName(err));
+}
 
 const utf8_codepage: c_uint = 65001;
 
@@ -159,6 +159,6 @@ const WindowsState = struct {
     output_mode: WIN_CONSOLE_MODE_OUTPUT,
 };
 
-// const PosixState = struct {
-//     termios: std.posix.termios,
-// };
+const PosixState = struct {
+    termios: std.posix.termios,
+};

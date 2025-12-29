@@ -28,6 +28,7 @@ sgr_pixels: bool = false,
 sync: bool = false,
 unicode_width_method: gwidth.Method = .wcwidth,
 color_scheme_updates: bool = false,
+in_band_winsize: bool = false,
 explicit_width: bool = false,
 scaled_text: bool = false,
 multi_cursor: ?MultiCursor = null,
@@ -104,7 +105,7 @@ pub fn sendQuery(stdout: std.fs.File) error{ NoTty, WriteFailed }!void {
 /// TODO: maybe add timeout
 pub fn parseQueryResponses(stdin: std.fs.File) error{ ReadFailed, EndOfStream }!TerminalCapabilities {
     var reader_buf: [32]u8 = undefined;
-    var _reader = stdin.reader(&reader_buf);
+    var _reader: std.fs.File.Reader = .initStreaming(stdin, &reader_buf);
     const reader = &_reader.interface;
 
     var caps: TerminalCapabilities = .{};
@@ -134,14 +135,18 @@ pub fn parseQueryResponses(stdin: std.fs.File) error{ ReadFailed, EndOfStream }!
     var buf: [128]u8 = undefined;
     var i: usize = 0;
     while (true) {
-        const byte = try reader.takeByte();
-        buf[i] = byte;
-        i += 1;
-        // if (byte == ctlseqs.ESC[0]) {
-        //     std.debug.print("b: <ESC>\n", .{});
-        // } else {
-        //     std.debug.print("b: {d} - '{c}'\n", .{ byte, byte });
-        // }
+        switch (builin.os.tag) {
+            .windows => {
+                buf[i] = try reader.takeByte();
+                i += 1;
+            },
+            else => {
+                i += std.posix.read(stdin.handle, buf[i..]) catch |err| switch (err) {
+                    error.WouldBlock => continue,
+                    else => return error.ReadFailed,
+                };
+            },
+        }
 
         if (i < 2) {
             continue;
@@ -299,7 +304,7 @@ inline fn parseCsi(input: []const u8, caps: *TerminalCapabilities) ParseResult {
             const ps = std.fmt.parseUnsigned(u16, input[3..delim_idx], 10) catch return skip;
             const pm = std.fmt.parseUnsigned(u8, input[delim_idx + 1 .. sequence.len - 2], 10) catch return skip;
             switch (ps) {
-                // Focus
+                // Focus Events
                 1004 => switch (pm) {
                     0, 4 => return skip,
                     else => {
@@ -307,7 +312,7 @@ inline fn parseCsi(input: []const u8, caps: *TerminalCapabilities) ParseResult {
                         return skip;
                     },
                 },
-                // Mouse Pixel reporting
+                // Mouse Pixel reporting (SGR)
                 1016 => switch (pm) {
                     0, 4 => return skip,
                     else => {
@@ -315,7 +320,7 @@ inline fn parseCsi(input: []const u8, caps: *TerminalCapabilities) ParseResult {
                         return skip;
                     },
                 },
-                // Sync
+                // Synchronized Output
                 2026 => switch (pm) {
                     0, 4 => return skip,
                     else => {
@@ -336,6 +341,14 @@ inline fn parseCsi(input: []const u8, caps: *TerminalCapabilities) ParseResult {
                     0, 4 => return skip,
                     else => {
                         caps.color_scheme_updates = true;
+                        return skip;
+                    },
+                },
+                // In-Band Window Resize Notifications, see https://gist.github.com/rockorager/e695fb2924d36b2bcf1fff4a3704bd83
+                2048 => switch (pm) {
+                    0, 4 => return skip,
+                    else => {
+                        caps.in_band_winsize = true;
                         return skip;
                     },
                 },
