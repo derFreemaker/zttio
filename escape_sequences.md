@@ -54,9 +54,11 @@ _completely ignored_
 - ``21...~`` -> key event of ``f10``
 - ``23...~`` -> key event of ``f11``
 - ``24...~`` -> key event of ``f12``
-- ``200...~`` -> bracketed ``paste_start``
-- ``201...~`` -> bracketed ``paste_end``
 - ``57427...~`` -> key event of ``keypad_begin``
+
+### Bracketed Paste
+- ``200...~`` -> ``paste_start``
+- ``201...~`` -> ``paste_end``
 
 ### Focus
 - ``...I`` -> focus ``in``
