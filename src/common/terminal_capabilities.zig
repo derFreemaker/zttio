@@ -23,18 +23,28 @@ fn getColorTermW() [:0]const u16 {
 
 const TerminalCapabilities = @This();
 
-sync: bool = false,
 focus: bool = false,
-kitty_keyboard: bool = false,
-kitty_graphics: bool = false,
-rgb: bool = false,
-smulx: bool = false,
-unicode_width_method: gwidth.Method = .wcwidth,
 sgr_pixels: bool = false,
+sync: bool = false,
+unicode_width_method: gwidth.Method = .wcwidth,
 color_scheme_updates: bool = false,
 explicit_width: bool = false,
 scaled_text: bool = false,
-multi_cursor: bool = false,
+multi_cursor: ?MultiCursor = null,
+kitty_keyboard: bool = false,
+kitty_graphics: bool = false,
+rgb: bool = false,
+
+pub const MultiCursor = struct {
+    block: bool = false,
+    beam: bool = false,
+    underline: bool = false,
+    follow_main_cursor: bool = false,
+    change_color_of_text_under_extra_cursors: bool = false,
+    change_color_of_extra_cursors: bool = false,
+    query_currently_set_cursors: bool = false,
+    query_currently_set_cursor_colors: bool = false,
+};
 
 /// Queries the terminal capabilities and blocks, until primary device attributes response is found.
 pub fn query(stdin: std.fs.File, stdout: std.fs.File) error{ NoTty, ReadFailed, WriteFailed, EndOfStream }!TerminalCapabilities {
@@ -59,8 +69,6 @@ pub fn sendQuery(stdout: std.fs.File) error{ NoTty, WriteFailed }!void {
         queries.decrqm_sgr_pixels ++
         queries.decrqm_unicode ++
         queries.decrqm_color_scheme ++
-        ctlseqs.Terminal.in_band_resize_set ++
-        ctlseqs.Terminal.braketed_paste_set ++
 
         // Explicit width query. We send the cursor home, then do an explicit width command, then
         // query the position. If the parsed value is an F3 with shift, we support explicit width.
@@ -68,21 +76,20 @@ pub fn sendQuery(stdout: std.fs.File) error{ NoTty, WriteFailed }!void {
         // shift + F3 (the row is ignored). We only care if the column has moved from 1->2, which is
         // why we see a Shift modifier
         ctlseqs.Cursor.home ++
-        queries.explicit_width_query ++
-        queries.cursor_position_request ++
+        queries.explicit_width ++
+        ctlseqs.Cursor.position_request ++
 
-        // Explicit width query. We send the cursor home, then do an scaled text command, then
+        // Scaled text query. We send the cursor home, then do an scaled text command, then
         // query the position. If the parsed value is an F3 with al, we support scaled text.
         // The returned response will be something like \x1b[1;3R...which when parsed as a Key is a
         // alt + F3 (the row is ignored). We only care if the column has moved from 1->3, which is
-        // why we see a Shift modifier
+        // why we see a Alt modifier
         ctlseqs.Cursor.home ++
-        queries.scaled_text_query ++
-        queries.cursor_position_request ++
-        queries.multi_cursor_query ++
-        // queries.xtversion ++
-        queries.kitty_keyboard_query ++
-        queries.kitty_graphics_query ++
+        queries.scaled_text ++
+        ctlseqs.Cursor.position_request ++
+        queries.kitty_multi_cursor ++
+        queries.kitty_keyboard ++
+        queries.kitty_graphics ++
         queries.primary_device_attrs);
 
     try writer.writeAll(ctlseqs.Screen.restore ++
@@ -91,9 +98,10 @@ pub fn sendQuery(stdout: std.fs.File) error{ NoTty, WriteFailed }!void {
     try writer.flush();
 }
 
-//TODO: maybe add timeout
 /// Will block until the primary device attributes are found.
 /// Recommended to use `query()`.
+///
+/// TODO: maybe add timeout
 pub fn parseQueryResponses(stdin: std.fs.File) error{ ReadFailed, EndOfStream }!TerminalCapabilities {
     var reader_buf: [32]u8 = undefined;
     var _reader = stdin.reader(&reader_buf);
@@ -167,7 +175,7 @@ pub const ParseResult = struct {
         .n = 0,
     };
 
-    pub fn skip(n: usize) ParseResult {
+    pub fn consume(n: usize) ParseResult {
         return ParseResult{
             .n = n,
         };
@@ -180,6 +188,7 @@ fn parse(input: []const u8, caps: *TerminalCapabilities) ParseResult {
     // We gate this for len > 1 so we can detect singular escape key presses
     if (input[0] == 0x1b and input.len > 1) {
         switch (input[1]) {
+            'N' => return parseSs2(input),
             'O' => return parseSs3(input),
             'P' => return skipUntilST(input), // DCS
             'X' => return skipUntilST(input), // SOS
@@ -188,16 +197,22 @@ fn parse(input: []const u8, caps: *TerminalCapabilities) ParseResult {
             '^' => return skipUntilST(input), // PM
             '_' => return parseApc(input, caps),
             else => {
-                return .skip(2);
+                return .consume(2);
             },
         }
     } else return parseGround(input);
 }
 
+inline fn parseSs2(input: []const u8) ParseResult {
+    if (input.len < 3) return .none;
+    if (input[2] == ctlseqs.ESC[0]) return .consume(2);
+    return .consume(3);
+}
+
 inline fn parseSs3(input: []const u8) ParseResult {
     if (input.len < 3) return .none;
-    if (input[2] == ctlseqs.ESC[0]) return .skip(2);
-    return .skip(3);
+    if (input[2] == ctlseqs.ESC[0]) return .consume(2);
+    return .consume(3);
 }
 
 inline fn skipUntilST(input: []const u8) ParseResult {
@@ -209,7 +224,7 @@ inline fn skipUntilST(input: []const u8) ParseResult {
 
         if (std.mem.eql(u8, chunk, ctlseqs.ST)) {
             const end = if (chunker.index) |index| index - 2 else input.len;
-            return .skip(end);
+            return .consume(end);
         }
     }
 
@@ -227,7 +242,7 @@ inline fn parseCsi(input: []const u8, caps: *TerminalCapabilities) ParseResult {
             else => continue,
         }
     } else return .none;
-    const skip: ParseResult = .skip(sequence.len);
+    const skip: ParseResult = .consume(sequence.len);
 
     const final = sequence[sequence.len - 1];
     return switch (final) {
@@ -250,7 +265,6 @@ inline fn parseCsi(input: []const u8, caps: *TerminalCapabilities) ParseResult {
 
             if (mods.shift) {
                 caps.explicit_width = true;
-                caps.unicode_width_method = .unicode;
             } else if (mods.alt) {
                 caps.scaled_text = true;
             }
@@ -272,6 +286,7 @@ inline fn parseCsi(input: []const u8, caps: *TerminalCapabilities) ParseResult {
             }
         },
         'u' => {
+            // we ignore the flags
             if (sequence.len > 2 and sequence[2] == '?') {
                 caps.kitty_keyboard = true;
             }
@@ -329,16 +344,28 @@ inline fn parseCsi(input: []const u8, caps: *TerminalCapabilities) ParseResult {
         },
         'q' => {
             // kitty multi cursor cap (CSI > 1;2;3;29;30;40;100;101 TRAILER) (TRAILER is " q")
+            // see https://sw.kovidgoyal.net/kitty/multiple-cursors-protocol/
             const second_final = sequence[sequence.len - 2];
             if (second_final != ' ') return skip;
-            // check for any digits. we're not too picky about checking the supported cursor types here
-            for (sequence[0 .. sequence.len - 2]) |c| switch (c) {
-                '0'...'9' => {
-                    caps.multi_cursor = true;
-                    return skip;
-                },
-                else => continue,
-            };
+
+            var supported_multi_cursor: MultiCursor = .{};
+            var field_iter = std.mem.splitScalar(u8, sequence[3 .. sequence.len - 2], ';');
+            while (field_iter.next()) |field| {
+                const cursor_shape = std.fmt.parseInt(u8, field, 10) catch continue;
+                switch (cursor_shape) {
+                    1 => supported_multi_cursor.block = true,
+                    2 => supported_multi_cursor.beam = true,
+                    3 => supported_multi_cursor.underline = true,
+                    29 => supported_multi_cursor.follow_main_cursor = true,
+                    30 => supported_multi_cursor.change_color_of_text_under_extra_cursors = true,
+                    40 => supported_multi_cursor.change_color_of_extra_cursors = true,
+                    100 => supported_multi_cursor.query_currently_set_cursors = true,
+                    101 => supported_multi_cursor.query_currently_set_cursor_colors = true,
+                    else => {},
+                }
+            }
+
+            caps.multi_cursor = supported_multi_cursor;
             return skip;
         },
         else => return skip,
@@ -365,7 +392,7 @@ inline fn parseOsc(input: []const u8) ParseResult {
     // The complete OSC sequence
     // const sequence = input[0..end];
 
-    return .skip(end);
+    return .consume(end);
 }
 
 inline fn parseApc(input: []const u8, caps: *TerminalCapabilities) ParseResult {
@@ -380,7 +407,7 @@ inline fn parseApc(input: []const u8, caps: *TerminalCapabilities) ParseResult {
         return .none;
     };
     const sequence = input[0..end];
-    const skip: ParseResult = .skip(sequence.len);
+    const skip: ParseResult = .consume(sequence.len);
 
     switch (input[2]) {
         'G' => {
@@ -412,9 +439,9 @@ inline fn parseGround(input: []const u8) ParseResult {
         else => {
             var iter = uucode.utf8.Iterator.init(input);
             // return null if we don't have a valid codepoint
-            const first_cp = iter.next() orelse return .skip(n);
+            const first_cp = iter.next() orelse return .consume(n);
 
-            n = std.unicode.utf8CodepointSequenceLength(first_cp) catch return .skip(n);
+            n = std.unicode.utf8CodepointSequenceLength(first_cp) catch return .consume(n);
 
             // Check if we have a multi-codepoint grapheme
             var grapheme_iter = uucode.grapheme.Iterator(uucode.utf8.Iterator).init(.init(input));
@@ -436,7 +463,7 @@ inline fn parseGround(input: []const u8) ParseResult {
         },
     }
 
-    return .skip(n);
+    return .consume(n);
 }
 
 /// Parse a param buffer, returning a default value if the param was empty
@@ -452,21 +479,28 @@ test "parse(csi): kitty multi cursor" {
         var caps = TerminalCapabilities{};
         const input = "\x1b[>1;2;3;29;30;40;100;101 q";
         const result = parse(input, &caps);
-        const expected: ParseResult = .{
-            .n = input.len,
-        };
+        const expected: ParseResult = .consume(input.len);
 
-        try testing.expectEqual(expected.n, result.n);
-        try testing.expect(caps.multi_cursor);
+        try testing.expectEqual(expected, result);
+        try testing.expectEqual(MultiCursor{
+            .block = true,
+            .beam = true,
+            .underline = true,
+            .follow_main_cursor = true,
+            .change_color_of_text_under_extra_cursors = true,
+            .change_color_of_extra_cursors = true,
+            .query_currently_set_cursors = true,
+            .query_currently_set_cursor_colors = true,
+        }, caps.multi_cursor.?);
     }
     {
         var caps = TerminalCapabilities{};
         const input = "\x1b[> q";
         const result = parse(input, &caps);
-        const expected: ParseResult = .skip(input.len);
+        const expected: ParseResult = .consume(input.len);
 
-        try testing.expectEqual(expected.n, result.n);
-        try testing.expectEqual(caps, TerminalCapabilities{});
+        try testing.expectEqual(expected, result);
+        try testing.expectEqual(TerminalCapabilities{ .multi_cursor = .{} }, caps);
     }
 }
 
@@ -486,7 +520,7 @@ test "parse(csi): decrpm" {
         var caps = TerminalCapabilities{};
         const input = "\x1b[?1016;0$y";
         const result = parse(input, &caps);
-        const expected: ParseResult = .skip(input.len);
+        const expected: ParseResult = .consume(input.len);
 
         try testing.expectEqual(expected.n, result.n);
         try testing.expectEqual(caps, TerminalCapabilities{});

@@ -81,7 +81,8 @@ pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, st
         else => return error.UnableToStartReader,
     };
 
-    ptr.stdout.writeAll(ctlseqs.Terminal.braketed_paste_set) catch {};
+    ptr.stdout.writeAll(ctlseqs.Terminal.braketed_paste_set ++
+        ctlseqs.Terminal.in_band_resize_set) catch {};
 
     if (ptr.caps.sgr_pixels) {
         ptr.stdout.writeAll(ctlseqs.Terminal.mouse_set_pixels) catch {};
@@ -317,6 +318,12 @@ pub const ClearLineMode = enum {
 pub fn resetLine(self: *Tty) error{WriteFailed}!void {
     try self.clearLine(.entire);
     try self.moveCursor(.front);
+}
+
+pub fn writeHyperlink(self: *Tty, hyperlink: ctlseqs.Hyperlink, text: []const u8) error{WriteFailed}!void {
+    try hyperlink.introduce(self.stdout);
+    try self.stdout.writeAll(text);
+    try self.stdout.writeAll(ctlseqs.Hyperlink.reset);
 }
 
 pub const Options = struct {

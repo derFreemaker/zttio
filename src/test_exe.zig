@@ -15,8 +15,11 @@ pub fn main() !u8 {
     defer tty.deinit();
 
     try tty.enableAndResetAlternativeScreen();
+    try tty.writeHyperlink(.{ .uri = "https://google.com" }, "google");
+    try tty.stdout.writeByte('\n');
     try tty.flush();
 
+    
     while (true) {
         const event = tty.nextEvent();
         defer event.deinit(event_allocator);

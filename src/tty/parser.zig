@@ -109,13 +109,14 @@ pub fn parse(self: *Parser, input: []const u8) !Result {
     // We gate this for len > 1 so we can detect singular escape key presses
     if (input[0] == 0x1b and input.len > 1) {
         switch (input[1]) {
+            'N' => return parseSs2(input),
             'O' => return parseSs3(input),
             'P' => return skipUntilST(input), // DCS
             'X' => return skipUntilST(input), // SOS
             '[' => return self.parseCsi(input),
             ']' => return self.parseOsc(input),
             '^' => return skipUntilST(input), // PM
-            '_' => return parseApc(input),
+            '_' => return skipUntilST(input), // APC
             else => {
                 // Anything else is an "alt + <char>" keypress
                 const key: Key = .{
@@ -197,10 +198,16 @@ fn parseGround(input: []const u8) !Result {
     };
 }
 
+fn parseSs2(input: []const u8) Result {
+    if (input.len < 3) return .none;
+
+    if (input[2] == 0x1B) return .skip(2);
+    return .skip(3);
+}
+
 fn parseSs3(input: []const u8) Result {
-    if (input.len < 3) {
-        return .none;
-    }
+    if (input.len < 3) return .none;
+
     const key: Key = switch (input[2]) {
         0x1B => return .skip(2),
         'A' => .{ .codepoint = Key.up },
@@ -215,7 +222,6 @@ fn parseSs3(input: []const u8) Result {
         'R' => .{ .codepoint = Key.f3 },
         'S' => .{ .codepoint = Key.f4 },
         else => {
-            log.warn("unhandled ss3: {x}", .{input[2]});
             return .skip(3);
         },
     };
@@ -223,30 +229,6 @@ fn parseSs3(input: []const u8) Result {
         .parse = .{ .event = .{ .key_press = key } },
         .n = 3,
     };
-}
-
-fn parseApc(input: []const u8) Result {
-    if (input.len < 3) {
-        return .none;
-    }
-
-    const end: usize = blk: {
-        const esc_result = skipUntilST(input);
-        if (esc_result.n > 0) break :blk esc_result.n;
-
-        return .none;
-    };
-    const sequence = input[0..end];
-
-    // switch (input[2]) {
-    //     'G' => return .{
-    //         .parse = .cap_kitty_graphics,
-    //         .n = sequence.len,
-    //     },
-    //     else => return .skip(sequence.len),
-    // }
-
-    return .skip(sequence.len);
 }
 
 /// Skips sequences until we see an ST (String Terminator, ESC \)
@@ -507,17 +489,6 @@ fn parseCsi(self: *Parser, input: []const u8) error{OutOfMemory}!Result {
         'I' => return .{ .parse = .{ .event = .focus_in }, .n = sequence.len },
         'O' => return .{ .parse = .{ .event = .focus_out }, .n = sequence.len },
         'M', 'm' => return parseMouse(sequence, input),
-        // 'c' => {
-        //     // Primary DA (CSI ? Pm c)
-        //     std.debug.assert(sequence.len >= 4); // ESC [ ? c == 4 bytes
-        //     switch (input[2]) {
-        //         '?' => {
-        //             std.debug.print("works\n", .{});
-        //             return .{ .parse = .cap_da1, .n = sequence.len };
-        //         },
-        //         else => return null_event,
-        //     }
-        // },
         'n' => {
             // Device Status Report
             // CSI Ps n
@@ -550,7 +521,7 @@ fn parseCsi(self: *Parser, input: []const u8) error{OutOfMemory}!Result {
             }
         },
         't' => {
-            // XTWINOPS
+            // XTWINOPS (https://gist.github.com/rockorager/e695fb2924d36b2bcf1fff4a3704bd83)
             // Split first into fields delimited by ';'
             var iter = std.mem.splitScalar(u8, sequence[2 .. sequence.len - 1], ';');
             const ps = iter.first();
@@ -581,10 +552,7 @@ fn parseCsi(self: *Parser, input: []const u8) error{OutOfMemory}!Result {
             // Not all fields will be present. Only unicode-key-code is
             // mandatory
 
-            // if (sequence.len > 2 and sequence[2] == '?') return .{
-            //     .parse = .cap_kitty_keyboard,
-            //     .n = sequence.len,
-            // };
+            // ignore the capability response
             if (sequence.len > 2 and sequence[2] == '?') return null_event;
 
             var key: Key = .{
@@ -666,51 +634,6 @@ fn parseCsi(self: *Parser, input: []const u8) error{OutOfMemory}!Result {
 
             return .{ .parse = .{ .event = event }, .n = sequence.len };
         },
-        // 'y' => {
-        //     // DECRPM (CSI ? Ps ; Pm $ y)
-        //     const delim_idx = std.mem.indexOfScalarPos(u8, input, 3, ';') orelse return null_event;
-        //     const ps = std.fmt.parseUnsigned(u16, input[3..delim_idx], 10) catch return null_event;
-        //     const pm = std.fmt.parseUnsigned(u8, input[delim_idx + 1 .. sequence.len - 2], 10) catch return null_event;
-        //     switch (ps) {
-        //         // Focus
-        //         1004 => switch (pm) {
-        //             0, 4 => return null_event,
-        //             else => return .{ .parse = .cap_focus, .n = sequence.len },
-        //         },
-        //         // Mouse Pixel reporting
-        //         1016 => switch (pm) {
-        //             0, 4 => return null_event,
-        //             else => return .{ .parse = .cap_sgr_pixels, .n = sequence.len },
-        //         },
-        //         // Sync
-        //         2026 => switch (pm) {
-        //             0, 4 => return null_event,
-        //             else => return .{ .parse = .cap_sync, .n = sequence.len },
-        //         },
-        //         // Unicode Core, see https://github.com/contour-terminal/terminal-unicode-core
-        //         2027 => switch (pm) {
-        //             0, 4 => return null_event,
-        //             else => return .{ .parse = .cap_unicode_width, .n = sequence.len },
-        //         },
-        //         // Color scheme reportnig, see https://github.com/contour-terminal/contour/blob/master/docs/vt-extensions/color-palette-update-notifications.md
-        //         2031 => switch (pm) {
-        //             0, 4 => return null_event,
-        //             else => return .{ .parse = .cap_color_scheme_updates, .n = sequence.len },
-        //         },
-        //         else => return null_event,
-        //     }
-        // },
-        // 'q' => {
-        //     // kitty multi cursor cap (CSI > 1;2;3;29;30;40;100;101 TRAILER) (TRAILER is " q")
-        //     const second_final = sequence[sequence.len - 2];
-        //     if (second_final != ' ') return null_event;
-        //     // check for any digits. we're not too picky about checking the supported cursor types here
-        //     for (sequence[0 .. sequence.len - 2]) |c| switch (c) {
-        //         '0'...'9' => return .{ .parse = .cap_multi_cursor, .n = sequence.len },
-        //         else => continue,
-        //     };
-        //     return null_event;
-        // },
         else => return null_event,
     }
 }
@@ -729,7 +652,7 @@ inline fn parseMouse(input: []const u8, full_input: []const u8) Result {
     var px: i16 = undefined;
     var py: i16 = undefined;
     var xterm: bool = undefined;
-    if (input.len == 3 and (input[2] == 'M') and full_input.len >= 6) {
+    if (input.len == 3 and input[2] == 'M' and full_input.len >= 6) {
         xterm = true;
         button_mask = full_input[3] - 32;
         px = full_input[4] - 32;
@@ -1286,7 +1209,7 @@ test "parse(csi): mouse (negative)" {
     try testing.expectEqual(expected.parse, result.parse);
 }
 
-test "parse(csi): xterm mouse" {
+test "parse(csi): xterm mouse (X10)" {
     const alloc = testing.allocator_instance.allocator();
     var parser: Parser = .init(alloc);
     defer parser.deinit();
@@ -1304,6 +1227,19 @@ test "parse(csi): xterm mouse" {
         .n = input.len,
     };
 
+    try testing.expectEqual(expected.n, result.n);
+    try testing.expectEqual(expected.parse, result.parse);
+}
+
+test "parse(csi): mouse (URXVT)" {
+    const alloc = testing.allocator_instance.allocator();
+    var parser: Parser = .init(alloc);
+    defer parser.deinit();
+
+    const input = "\x1b[35;-50;100m";
+    const result = try parser.parseCsi(input);
+    const expected: Result = .skip(input.len);
+    
     try testing.expectEqual(expected.n, result.n);
     try testing.expectEqual(expected.parse, result.parse);
 }

@@ -22,18 +22,19 @@ pub const Queries = struct {
     pub const decrqm_sync = CSI ++ "?2026$p";
     pub const decrqm_unicode = CSI ++ "?2027$p";
     pub const decrqm_color_scheme = CSI ++ "?2031$p";
-    pub const kitty_keyboard_query = CSI ++ "?u";
-    pub const kitty_graphics_query = APC ++ "Gi=1,a=q,q=2" ++ ST;
-    pub const sixel_geometry_query = CSI ++ "?2;1;0S";
-    pub const cursor_position_request = CSI ++ "6n";
-    pub const explicit_width_query = OSC ++ "66;w=1; " ++ ST;
-    pub const scaled_text_query = OSC ++ "66;s=2; " ++ ST;
-    pub const multi_cursor_query = CSI ++ "> q";
+    pub const kitty_keyboard = CSI ++ "?u";
+    pub const kitty_graphics = APC ++ "Gi=1,s=1,v=1,a=q,t=d,f=24;AAAA" ++ ST;
+    pub const sixel_geometry = CSI ++ "?2;1;0S";
+    pub const explicit_width = OSC ++ "66;w=1; " ++ ST;
+    pub const scaled_text = OSC ++ "66;s=2; " ++ ST;
+    pub const kitty_multi_cursor = CSI ++ "> q";
 };
 
 pub const Styling = @import("styling.zig");
 
 pub const Cursor = struct {
+    pub const position_request = CSI ++ "6n";
+
     pub const home = CSI ++ "H";
 
     pub const move_to_line_column = CSI ++ "{d};{d}H";
@@ -127,13 +128,13 @@ pub const Hyperlink = struct {
     pub fn introduce(self: Hyperlink, writer: *std.Io.Writer) !void {
         try writer.writeAll(OSC ++ "8;");
 
-        var sep = ListSeparator.init(":");
-
         if (self.params.id) |id| {
-            try sep.print(writer);
-
             try writer.print("id={s}", .{id});
         }
+
+        try writer.writeByte(';');
+
+        try writer.writeAll(self.uri);
 
         try writer.writeAll(ST);
     }

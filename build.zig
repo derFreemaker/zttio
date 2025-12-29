@@ -13,11 +13,11 @@ pub fn build(b: *std.Build) void {
     });
     const uucode_mod = uucode_dep.module("uucode");
 
-    const zigimg_dep = b.dependency("zigimg", .{
-        .target = target,
-        .optimize = optimize,
-    });
-    const zigimg_mod = zigimg_dep.module("zigimg");
+    // const zigimg_dep = b.dependency("zigimg", .{
+    //     .target = target,
+    //     .optimize = optimize,
+    // });
+    // const zigimg_mod = zigimg_dep.module("zigimg");
 
     const common_mod = b.addModule("common", .{
         .target = target,
@@ -28,7 +28,7 @@ pub fn build(b: *std.Build) void {
         .imports = &.{
             .{ .name = "zigwin", .module = zigwin_mod },
             .{ .name = "uucode", .module = uucode_mod },
-            .{ .name = "zigimg", .module = zigimg_mod },
+            // .{ .name = "zigimg", .module = zigimg_mod },
         },
     });
 
