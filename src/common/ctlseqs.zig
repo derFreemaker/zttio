@@ -158,8 +158,8 @@ pub const Terminal = struct {
     pub const in_band_resize_reset = CSI ++ "?2048l";
 
     // sync
-    pub const sync_set = CSI ++ "?2026h";
-    pub const sync_reset = CSI ++ "?2026l";
+    pub const sync_begin = CSI ++ "?2026h";
+    pub const sync_end = CSI ++ "?2026l";
 
     // unicode
     pub const unicode_set = CSI ++ "?2027h";

@@ -356,6 +356,14 @@ pub fn writeHyperlink(self: *Tty, hyperlink: ctlseqs.Hyperlink, text: []const u8
     try self.stdout.writeAll(ctlseqs.Hyperlink.reset);
 }
 
+pub fn startSync(self: *Tty) error{WriteFailed}!void {
+    return self.stdout.writeAll(ctlseqs.Terminal.sync_begin);
+}
+
+pub fn endSync(self: *Tty) error{WriteFailed}!void {
+    return self.stdout.writeAll(ctlseqs.Terminal.sync_end);
+}
+
 pub const Options = struct {
     kitty_keyboard_flags: ctlseqs.Terminal.KittyKeyboardFlags = .default,
 };

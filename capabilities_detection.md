@@ -37,7 +37,7 @@ indicates the setting of the mode. The Ps values are the same for the ANSI and D
 
 **Query:** CSI - ``?1016$p``
 
-### Synchronized Output
+### [Synchronized Output](https://github.com/contour-terminal/vt-extensions/blob/master/synchronized-output.md)
 **Pd:** ``2026``
 
 **Query:** CSI - ``?2026$p``
