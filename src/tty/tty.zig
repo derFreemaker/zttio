@@ -19,6 +19,8 @@ const DebugAllocator = if (builtin.mode == .Debug)
 else
     void;
 
+const log = std.log.scoped(.zttio_tty);
+
 const Tty = @This();
 
 stdin_handle: std.fs.File.Handle,
@@ -58,7 +60,7 @@ pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, st
     }
     errdefer if (builtin.mode == .Debug) {
         if (ptr.debug_allocator.deinit() == .leak)
-            @panic("leaks found in tty");
+            log.err("leaks found", .{});
     };
     ptr.allocator = if (builtin.mode == .Debug)
         ptr.debug_allocator.allocator()
@@ -139,7 +141,7 @@ pub fn deinit(self: *Tty) void {
 
     if (builtin.mode == .Debug) {
         if (self.debug_allocator.deinit() == .leak)
-            @panic("leaks found in tty");
+            log.err("leaks found", .{});
     }
     const allocator = self.arena.child_allocator;
     self.arena.deinit();
