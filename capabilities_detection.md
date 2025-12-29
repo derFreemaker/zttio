@@ -7,6 +7,25 @@ Should be fine, since detection should be done before anything else.
 
 ## [DECRQM](https://vt100.net/docs/vt510-rm/DECRQM.html)
 **Response Format:** [DECRPM](https://vt100.net/docs/vt510-rm/DECRPM.html)
+- **Ansi:** CSI - ``{Pa};{Ps}$y``
+- **DEC:** CSI - ``?{Pd};{Ps}$y``
+
+**Pa:**
+[Table 5–6](https://vt100.net/docs/vt510-rm/DECRPM.html#T5-6) lists the values for Pa.
+
+**Pd:**
+indicates which DEC mode the terminal is reporting on. [Table 5–6](https://vt100.net/docs/vt510-rm/DECRPM.html#T5-6) lists the values for Pd.
+
+**Ps:**
+indicates the setting of the mode. The Ps values are the same for the ANSI and DEC versions.
+
+| Ps | Mode Setting        |
+|----|---------------------|
+| 0  | Mode not recognized |
+| 1  | Set                 |
+| 2  | Reset               |
+| 3  | Permanently set     |
+| 4  | Permanently reset   |
 
 ### Focus Events
 **Pd:** ``1004``

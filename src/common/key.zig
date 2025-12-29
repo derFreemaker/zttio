@@ -159,14 +159,6 @@ pub const Modifiers = packed struct(u8) {
     }
 };
 
-pub const KittyFlags = packed struct(u5) {
-    disambiguate: bool = true,
-    report_events: bool = false,
-    report_alternate_keys: bool = true,
-    report_all_as_ctl_seqs: bool = true,
-    report_text: bool = true,
-};
-
 // a few special keys that we encode as their actual ascii value
 pub const tab: u21 = 0x09;
 pub const enter: u21 = 0x0D;

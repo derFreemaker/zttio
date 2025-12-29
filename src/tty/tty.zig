@@ -91,7 +91,7 @@ pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, st
     } else {
         ptr.stdout.writeAll(ctlseqs.Terminal.mouse_set) catch {};
     }
-    if (ptr.caps.kitty_keyboard) {
+    if (ptr.caps.kitty_keyboard != null) {
         ctlseqs.Terminal.setKittyKeyboardHandling(ptr.stdout, opts.kitty_keyboard_flags) catch {};
     }
     ptr.stdout.flush() catch {};
@@ -357,7 +357,7 @@ pub fn writeHyperlink(self: *Tty, hyperlink: ctlseqs.Hyperlink, text: []const u8
 }
 
 pub const Options = struct {
-    kitty_keyboard_flags: common.Key.KittyFlags = .{},
+    kitty_keyboard_flags: ctlseqs.Terminal.KittyKeyboardFlags = .default,
 };
 
 test {

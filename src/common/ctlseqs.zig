@@ -174,13 +174,40 @@ pub const Terminal = struct {
     pub const color_scheme_set = CSI ++ "?2031h";
     pub const color_scheme_reset = CSI ++ "?2031l";
 
+    // multi cursor
+    pub const MultiCursor = struct {
+        block: bool = false,
+        beam: bool = false,
+        underline: bool = false,
+        follow_main_cursor: bool = false,
+        change_color_of_text_under_extra_cursors: bool = false,
+        change_color_of_extra_cursors: bool = false,
+        query_currently_set_cursors: bool = false,
+        query_currently_set_cursor_colors: bool = false,
+    };
+
     // keyboard handling
     pub const kitty_keyboard_handling_reset = CSI ++ "<u";
     pub const kitty_keyboard_handling_set_x = CSI ++ ">{d}u";
-    pub fn setKittyKeyboardHandling(writer: *std.Io.Writer, detail: Key.KittyFlags) !void {
+    pub fn setKittyKeyboardHandling(writer: *std.Io.Writer, detail: Terminal.KittyKeyboardFlags) !void {
         const flag_int: u5 = @bitCast(detail);
         return writer.print(kitty_keyboard_handling_set_x, .{flag_int});
     }
+    pub const KittyKeyboardFlags = packed struct(u5) {
+        disambiguate: bool = false,
+        report_events: bool = false,
+        report_alternate_keys: bool = false,
+        report_all_as_ctl_seqs: bool = false,
+        report_text: bool = false,
+
+        pub const default = KittyKeyboardFlags{
+            .disambiguate = true,
+            .report_events = false,
+            .report_alternate_keys = true,
+            .report_all_as_ctl_seqs = true,
+            .report_text = true,
+        };
+    };
 
     // notify
     pub const notify_x = OSC ++ "9;{s}" ++ ST;

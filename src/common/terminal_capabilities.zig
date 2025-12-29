@@ -5,6 +5,8 @@ const zigwin = @import("zigwin");
 const winconsole = zigwin.system.console;
 
 const ctlseqs = @import("ctlseqs.zig");
+const MultiCursor = ctlseqs.Terminal.MultiCursor;
+const KittyKeyboardFlags = ctlseqs.Terminal.KittyKeyboardFlags;
 const gwidth = @import("gwidth.zig");
 const Key = @import("key.zig");
 
@@ -32,20 +34,9 @@ in_band_winsize: bool = false,
 explicit_width: bool = false,
 scaled_text: bool = false,
 multi_cursor: ?MultiCursor = null,
-kitty_keyboard: bool = false,
+kitty_keyboard: ?KittyKeyboardFlags = null,
 kitty_graphics: bool = false,
 rgb: bool = false,
-
-pub const MultiCursor = struct {
-    block: bool = false,
-    beam: bool = false,
-    underline: bool = false,
-    follow_main_cursor: bool = false,
-    change_color_of_text_under_extra_cursors: bool = false,
-    change_color_of_extra_cursors: bool = false,
-    query_currently_set_cursors: bool = false,
-    query_currently_set_cursor_colors: bool = false,
-};
 
 /// Queries the terminal capabilities and blocks, until primary device attributes response is found.
 pub fn query(stdin: std.fs.File, stdout: std.fs.File) error{ NoTty, ReadFailed, WriteFailed, EndOfStream }!TerminalCapabilities {
@@ -247,7 +238,7 @@ inline fn parseCsi(input: []const u8, caps: *TerminalCapabilities) ParseResult {
             else => continue,
         }
     } else return .none;
-    const skip: ParseResult = .consume(sequence.len);
+    const consume: ParseResult = .consume(sequence.len);
 
     const final = sequence[sequence.len - 1];
     return switch (final) {
@@ -264,7 +255,7 @@ inline fn parseCsi(input: []const u8, caps: *TerminalCapabilities) ParseResult {
                 const field_buf = field_iter.next() orelse break :field2;
                 var param_iter = std.mem.splitScalar(u8, field_buf, ':');
                 const modifier_buf = param_iter.next() orelse unreachable;
-                const modifier_mask = parseParam(u8, modifier_buf, 1) orelse return skip;
+                const modifier_mask = parseParam(u8, modifier_buf, 1) orelse return consume;
                 mods = @bitCast(modifier_mask -| 1);
             }
 
@@ -274,7 +265,7 @@ inline fn parseCsi(input: []const u8, caps: *TerminalCapabilities) ParseResult {
                 caps.scaled_text = true;
             }
 
-            return skip;
+            return consume;
         },
         'c' => {
             // Primary DA (CSI ? Pm c)
@@ -287,79 +278,80 @@ inline fn parseCsi(input: []const u8, caps: *TerminalCapabilities) ParseResult {
                         .n = sequence.len,
                     };
                 },
-                else => return skip,
+                else => return consume,
             }
         },
         'u' => {
             // we ignore the flags
-            if (sequence.len > 2 and sequence[2] == '?') {
-                caps.kitty_keyboard = true;
-            }
+            if (sequence.len < 3 or sequence[2] != '?') return consume;
 
-            return skip;
+            const flags_num = parseParam(u5, sequence[3 .. sequence.len - 1], null) orelse return consume;
+            caps.kitty_keyboard = @as(KittyKeyboardFlags, @bitCast(flags_num));
+
+            return consume;
         },
         'y' => {
-            // DECRPM (CSI ? Ps ; Pm $ y)
-            const delim_idx = std.mem.indexOfScalarPos(u8, input, 3, ';') orelse return skip;
-            const ps = std.fmt.parseUnsigned(u16, input[3..delim_idx], 10) catch return skip;
-            const pm = std.fmt.parseUnsigned(u8, input[delim_idx + 1 .. sequence.len - 2], 10) catch return skip;
-            switch (ps) {
+            // DECRPM (CSI ? Pd ; Ps $ y)
+            const delim_idx = std.mem.indexOfScalarPos(u8, input, 3, ';') orelse return consume;
+            const pd = std.fmt.parseUnsigned(u16, input[3..delim_idx], 10) catch return consume;
+            const ps = std.fmt.parseUnsigned(u8, input[delim_idx + 1 .. sequence.len - 2], 10) catch return consume;
+            switch (pd) {
                 // Focus Events
-                1004 => switch (pm) {
-                    0, 4 => return skip,
+                1004 => switch (ps) {
+                    0, 4 => return consume,
                     else => {
                         caps.focus = true;
-                        return skip;
+                        return consume;
                     },
                 },
                 // Mouse Pixel reporting (SGR)
-                1016 => switch (pm) {
-                    0, 4 => return skip,
+                1016 => switch (ps) {
+                    0, 4 => return consume,
                     else => {
                         caps.sgr_pixels = true;
-                        return skip;
+                        return consume;
                     },
                 },
                 // Synchronized Output
-                2026 => switch (pm) {
-                    0, 4 => return skip,
+                2026 => switch (ps) {
+                    0, 4 => return consume,
                     else => {
                         caps.sync = true;
-                        return skip;
+                        return consume;
                     },
                 },
                 // Unicode Core, see https://github.com/contour-terminal/terminal-unicode-core
-                2027 => switch (pm) {
-                    0, 4 => return skip,
+                2027 => switch (ps) {
+                    0, 4 => return consume,
                     else => {
                         caps.unicode_width_method = .unicode;
-                        return skip;
+                        return consume;
                     },
                 },
                 // Color scheme reportnig, see https://github.com/contour-terminal/contour/blob/master/docs/vt-extensions/color-palette-update-notifications.md
-                2031 => switch (pm) {
-                    0, 4 => return skip,
+                2031 => switch (ps) {
+                    0, 4 => return consume,
                     else => {
                         caps.color_scheme_updates = true;
-                        return skip;
+                        return consume;
                     },
                 },
                 // In-Band Window Resize Notifications, see https://gist.github.com/rockorager/e695fb2924d36b2bcf1fff4a3704bd83
-                2048 => switch (pm) {
-                    0, 4 => return skip,
+                2048 => switch (ps) {
+                    0, 4 => return consume,
                     else => {
                         caps.in_band_winsize = true;
-                        return skip;
+                        return consume;
                     },
                 },
-                else => return skip,
+                else => return consume,
             }
         },
         'q' => {
             // kitty multi cursor cap (CSI > 1;2;3;29;30;40;100;101 TRAILER) (TRAILER is " q")
             // see https://sw.kovidgoyal.net/kitty/multiple-cursors-protocol/
             const second_final = sequence[sequence.len - 2];
-            if (second_final != ' ') return skip;
+            if (second_final != ' ') return consume;
 
             var supported_multi_cursor: MultiCursor = .{};
             var field_iter = std.mem.splitScalar(u8, sequence[3 .. sequence.len - 2], ';');
@@ -379,9 +371,9 @@ inline fn parseCsi(input: []const u8, caps: *TerminalCapabilities) ParseResult {
             }
 
             caps.multi_cursor = supported_multi_cursor;
-            return skip;
+            return consume;
         },
-        else => return skip,
+        else => return consume,
     };
 }
 
@@ -420,14 +412,14 @@ inline fn parseApc(input: []const u8, caps: *TerminalCapabilities) ParseResult {
         return .none;
     };
     const sequence = input[0..end];
-    const skip: ParseResult = .consume(sequence.len);
+    const consume: ParseResult = .consume(sequence.len);
 
     switch (input[2]) {
         'G' => {
             caps.kitty_graphics = true;
-            return skip;
+            return consume;
         },
-        else => return skip,
+        else => return consume,
     }
 }
 
@@ -487,10 +479,125 @@ inline fn parseParam(comptime T: type, buf: []const u8, default: ?T) ?T {
 
 const testing = std.testing;
 
-test "parse(csi): kitty multi cursor" {
+test "parse(csi): primary da" {
+    var caps = TerminalCapabilities{};
+    const input = "\x1b[?c";
+    const result = parse(input, &caps);
+    const expected: ParseResult = .{
+        .n = input.len,
+        .done = true,
+    };
+
+    try testing.expectEqual(expected, result);
+    try testing.expectEqual(TerminalCapabilities{}, caps);
+}
+
+fn testDECRPM(pd: usize, supported_caps: TerminalCapabilities) !void {
     {
         var caps = TerminalCapabilities{};
-        const input = "\x1b[>1;2;3;29;30;40;100;101 q";
+        const input = try std.fmt.allocPrint(testing.allocator, ctlseqs.CSI ++ "?{d};0$y", .{pd});
+        defer testing.allocator.free(input);
+
+        const result = parse(input, &caps);
+        const expected: ParseResult = .consume(input.len);
+
+        try testing.expectEqual(expected, result);
+        try testing.expectEqual(TerminalCapabilities{}, caps);
+    }
+    {
+        var caps = TerminalCapabilities{};
+        const input = try std.fmt.allocPrint(testing.allocator, ctlseqs.CSI ++ "?{d};1$y", .{pd});
+        defer testing.allocator.free(input);
+
+        const result = parse(input, &caps);
+        const expected: ParseResult = .consume(input.len);
+
+        try testing.expectEqual(expected, result);
+        try testing.expectEqual(supported_caps, caps);
+    }
+    {
+        var caps = TerminalCapabilities{};
+        const input = try std.fmt.allocPrint(testing.allocator, ctlseqs.CSI ++ "?{d};2$y", .{pd});
+        defer testing.allocator.free(input);
+
+        const result = parse(input, &caps);
+        const expected: ParseResult = .consume(input.len);
+
+        try testing.expectEqual(expected, result);
+        try testing.expectEqual(supported_caps, caps);
+    }
+    {
+        var caps = TerminalCapabilities{};
+        const input = try std.fmt.allocPrint(testing.allocator, ctlseqs.CSI ++ "?{d};3$y", .{pd});
+        defer testing.allocator.free(input);
+
+        const result = parse(input, &caps);
+        const expected: ParseResult = .consume(input.len);
+
+        try testing.expectEqual(expected, result);
+        try testing.expectEqual(supported_caps, caps);
+    }
+    {
+        var caps = TerminalCapabilities{};
+        const input = try std.fmt.allocPrint(testing.allocator, ctlseqs.CSI ++ "?{d};4$y", .{pd});
+        defer testing.allocator.free(input);
+
+        const result = parse(input, &caps);
+        const expected: ParseResult = .consume(input.len);
+
+        try testing.expectEqual(expected, result);
+        try testing.expectEqual(TerminalCapabilities{}, caps);
+    }
+}
+
+test "parse(DECRQM): Focus Events" {
+    try testDECRPM(1004, .{ .focus = true });
+}
+
+test "parse(DECRQM): SGR Pixels" {
+    try testDECRPM(1016, .{ .sgr_pixels = true });
+}
+
+test "parse(DECRQM): Synchronized Output" {
+    try testDECRPM(2026, .{ .sync = true });
+}
+
+test "parse(DECRQM): Unicode Core" {
+    try testDECRPM(2027, .{ .unicode_width_method = .unicode });
+}
+
+test "parse(DECRQM): Color scheme Updates" {
+    try testDECRPM(2031, .{ .color_scheme_updates = true });
+}
+
+test "parse(DECRQM): In-Band Window Resize Notifications" {
+    try testDECRPM(2048, .{ .in_band_winsize = true });
+}
+
+test "parse(CSI): Explicit Width" {
+    var caps = TerminalCapabilities{};
+    const input = ctlseqs.CSI ++ "1;2R";
+    const result = parse(input, &caps);
+    const expected: ParseResult = .consume(input.len);
+
+    try testing.expectEqual(expected, result);
+    try testing.expect(caps.explicit_width);
+}
+
+test "parse(CSI): Scaled Text" {
+    var caps = TerminalCapabilities{};
+    const input = ctlseqs.CSI ++ "1;3R";
+    const result = parse(input, &caps);
+    const expected: ParseResult = .consume(input.len);
+
+    try testing.expectEqual(expected, result);
+    try testing.expect(caps.scaled_text);
+}
+
+test "parse(CSI): kitty multi cursor" {
+    {
+        var caps = TerminalCapabilities{};
+        const input = ctlseqs.CSI ++ ">1;2;3;29;30;40;100;101 q";
         const result = parse(input, &caps);
         const expected: ParseResult = .consume(input.len);
 
@@ -508,48 +615,48 @@ test "parse(csi): kitty multi cursor" {
     }
     {
         var caps = TerminalCapabilities{};
-        const input = "\x1b[> q";
+        const input = ctlseqs.CSI ++ "> q";
         const result = parse(input, &caps);
         const expected: ParseResult = .consume(input.len);
 
         try testing.expectEqual(expected, result);
-        try testing.expectEqual(TerminalCapabilities{ .multi_cursor = .{} }, caps);
+        try testing.expectEqual(MultiCursor{}, caps.multi_cursor);
     }
 }
 
-test "parse(csi): decrpm" {
+test "parse(CSI): Kitty Keyboard Protocol" {
     {
         var caps = TerminalCapabilities{};
-        const input = "\x1b[?1016;1$y";
-        const result = parse(input, &caps);
-        const expected: ParseResult = .{
-            .n = input.len,
-        };
-
-        try testing.expectEqual(expected.n, result.n);
-        try testing.expect(caps.sgr_pixels);
-    }
-    {
-        var caps = TerminalCapabilities{};
-        const input = "\x1b[?1016;0$y";
+        const input = ctlseqs.CSI ++ "?31u";
         const result = parse(input, &caps);
         const expected: ParseResult = .consume(input.len);
 
-        try testing.expectEqual(expected.n, result.n);
-        try testing.expectEqual(caps, TerminalCapabilities{});
+        try testing.expectEqual(expected, result);
+        try testing.expectEqual(KittyKeyboardFlags{
+            .disambiguate = true,
+            .report_events = true,
+            .report_alternate_keys = true,
+            .report_all_as_ctl_seqs = true,
+            .report_text = true,
+        }, caps.kitty_keyboard.?);
+    }
+    {
+        var caps = TerminalCapabilities{};
+        const input = ctlseqs.CSI ++ "?0u";
+        const result = parse(input, &caps);
+        const expected: ParseResult = .consume(input.len);
+
+        try testing.expectEqual(expected, result);
+        try testing.expectEqual(KittyKeyboardFlags{}, caps.kitty_keyboard.?);
     }
 }
 
-test "parse(csi): primary da" {
+test "parse(APC): Kitty Graphics Protocol" {
     var caps = TerminalCapabilities{};
-    const input = "\x1b[?c";
+    const input = ctlseqs.APC ++ "Gi=1;OK" ++ ctlseqs.ST;
     const result = parse(input, &caps);
-    const expected: ParseResult = .{
-        .n = input.len,
-        .done = true,
-    };
+    const expected: ParseResult = .consume(input.len);
 
-    try testing.expectEqual(expected.n, result.n);
     try testing.expectEqual(expected, result);
-    try testing.expectEqual(caps, TerminalCapabilities{});
+    try testing.expect(caps.kitty_graphics);
 }
