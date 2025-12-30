@@ -148,6 +148,10 @@ pub fn deinit(self: *Tty) void {
     allocator.destroy(self);
 }
 
+pub fn panicDeinit(self: *Tty) void {
+    self.raw_mode.disable();
+}
+
 pub inline fn strWidth(self: *Tty, str: []const u8) usize {
     return common.gwidth.gwidth(str, self.caps.unicode_width_method);
 }
@@ -366,39 +370,13 @@ pub fn endSync(self: *Tty) error{WriteFailed}!void {
     return self.stdout.writeAll(ctlseqs.Terminal.sync_end);
 }
 
-pub fn beginScaledText(self: *Tty, scale: ScaledText) error{WriteFailed}!void {
-    switch (scale) {
-        .normal => |n| {
-            return ctlseqs.Text.introduceScaled(self.stdout, n.scale, n.width);
-        },
-        .fractions => |f| {
-            return ctlseqs.Text.introduceScaledWithFractions(self.stdout, f.scale, f.width, f.numerator, f.denominator, f.vertical_align);
-        },
-    }
+pub fn beginScaledText(self: *Tty, scaled: ctlseqs.Text.Scaled) error{WriteFailed}!void {
+    return ctlseqs.Text.introduceScaled(self.stdout, scaled);
 }
 
 pub fn endScaledText(self: *Tty) error{WriteFailed}!void {
     return self.stdout.writeAll(ctlseqs.Text.end_scaled_or_explicit_width);
 }
-
-pub const ScaledText = union(enum) {
-    normal: Normal,
-    fractions: Fractions,
-
-    pub const Normal = struct {
-        scale: u3,
-        width: u3,
-    };
-
-    pub const Fractions = struct {
-        scale: u3,
-        width: u3,
-        numerator: u4,
-        denominator: u4,
-        vertical_align: ctlseqs.Text.VerticalAlign,
-        horizontal_align: ctlseqs.Text.HorizontalAlign,
-    };
-};
 
 pub fn beginExplicitWidthText(self: *Tty, width: u3) error{WriteFailed}!void {
     return ctlseqs.Text.introduceExplicitWidth(self.stdout, width);

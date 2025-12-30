@@ -1,6 +1,8 @@
 const std = @import("std");
 
 pub fn build(b: *std.Build) void {
+    const build_examples = b.option(bool, "examples", "build examples") orelse false;
+
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
@@ -82,22 +84,6 @@ pub fn build(b: *std.Build) void {
         },
     });
 
-    const test_exe_mod = b.addModule("test_exe", .{
-        .target = target,
-        .optimize = optimize,
-
-        .root_source_file = b.path("src/test_exe.zig"),
-
-        .imports = &.{
-            .{ .name = "zttio", .module = zttio_mod },
-        },
-    });
-    const test_exe = b.addExecutable(.{
-        .name = "test_exe",
-        .root_module = test_exe_mod,
-    });
-    b.installArtifact(test_exe);
-
     const common_tests = b.addTest(.{
         .root_module = common_mod,
     });
@@ -111,4 +97,20 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_common_tests.step);
     test_step.dependOn(&run_tty_tests.step);
+
+    if (build_examples) {
+        b.installArtifact(b.addExecutable(.{
+            .name = "simple_example",
+            .root_module = b.createModule(.{
+                .target = target,
+                .optimize = optimize,
+
+                .root_source_file = b.path("examples/simple.zig"),
+
+                .imports = &.{
+                    .{ .name = "zttio", .module = zttio_mod },
+                },
+            }),
+        }));
+    }
 }

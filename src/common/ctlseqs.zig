@@ -278,27 +278,53 @@ pub const Terminal = struct {
 pub const Text = struct {
     pub const end_scaled_or_explicit_width = ST;
 
-    pub const introduce_scaled_text = OSC ++ "66;s={d}:w={d};";
-    pub fn introduceScaled(writer: *std.Io.Writer, scale: u3, width: u3) !void {
-        assert(1 <= scale);
-        return writer.print(introduce_scaled_text, .{ scale, width });
+    pub fn introduceScaled(writer: *std.Io.Writer, scaled: Scaled) !void {
+        try writer.writeAll(OSC ++ "66;");
+
+        assert(1 <= scaled.scale);
+        try writer.print("s={d}", .{scaled.scale});
+
+        if (scaled.width) |w| {
+            try writer.print(":w={d}", .{w});
+        }
+
+        if (scaled.numerator) |n| {
+            try writer.print(":n={d}", .{n});
+        }
+
+        if (scaled.denominator) |d| {
+            try writer.print(":d={d}", .{d});
+        }
+
+        if (scaled.vertical_align) |v_align| {
+            try writer.print(":v={d}", .{@intFromEnum(v_align)});
+        }
+
+        if (scaled.horizontal_align) |h_align| {
+            try writer.print(":h={d}", .{@intFromEnum(h_align)});
+        }
+
+        try writer.writeByte(';');
     }
 
-    pub const introduce_scaled_text_with_fractions = OSC ++ "66;s={d}:w={d}:n={d}:d={d}:v={d}:h={d};";
-    pub fn introduceScaledWithFractions(writer: *std.Io.Writer, scale: u3, width: u3, numerator: u4, denominator: u4, vertical_align: VerticalAlign, horizontal_align: HorizontalAlign) !void {
-        assert(1 <= scale);
-        assert(denominator == 0 or denominator > numerator);
-        return writer.print(introduce_scaled_text_with_fractions, .{ scale, width, numerator, denominator, @intFromEnum(vertical_align), @intFromEnum(horizontal_align) });
-    }
-    pub const VerticalAlign = enum(u2) {
-        top = 0,
-        bottom = 1,
-        centered = 2,
-    };
-    pub const HorizontalAlign = enum(u2) {
-        left = 0,
-        right = 1,
-        centered = 2,
+    pub const Scaled = struct {
+        scale: u3,
+        width: ?u3 = null,
+        numerator: ?u4 = null,
+        denominator: ?u4 = null,
+        vertical_align: ?VerticalAlign = null,
+        horizontal_align: ?HorizontalAlign = null,
+
+        pub const VerticalAlign = enum(u2) {
+            top = 0,
+            bottom = 1,
+            centered = 2,
+        };
+        pub const HorizontalAlign = enum(u2) {
+            left = 0,
+            right = 1,
+            centered = 2,
+        };
     };
 
     pub const introduce_explicit_width = OSC ++ "66;w={d};";

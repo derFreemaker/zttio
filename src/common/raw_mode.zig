@@ -29,6 +29,8 @@ pub fn disable(self: *RawMode) void {
     } else {
         disablePosix(org_state);
     }
+    
+    self.original_state = null;
 }
 
 fn enableWindows(stdin: std.fs.File.Handle, stdout: std.fs.File.Handle) error{ InvalidHandle, Unexpected }!OrignalState {

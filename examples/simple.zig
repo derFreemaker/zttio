@@ -1,12 +1,12 @@
 const std = @import("std");
 const zttio = @import("zttio");
 
-var raw_mode: ?zttio.RawMode = null;
+var global_tty: ?*zttio.Tty = null;
 
 pub const panic = std.debug.FullPanic(testPanic);
 pub fn testPanic(msg: []const u8, ret_addr: ?usize) noreturn {
-    if (raw_mode) |*mode| {
-        mode.disable();
+    if (global_tty) |tty| {
+        tty.panicDeinit();
     }
 
     std.debug.defaultPanic(msg, ret_addr);
@@ -25,16 +25,17 @@ pub fn main() !u8 {
     const stdin: std.fs.File = .stdin();
     const stdout: std.fs.File = .stdout();
 
-    raw_mode = try zttio.RawMode.enable(stdin.handle, stdout.handle);
-    defer raw_mode.?.disable();
-
     var tty = try zttio.Tty.init(allocator, event_allocator, stdin, stdout, null, .{});
-    defer tty.deinit();
+    global_tty = tty;
+    defer {
+        global_tty = null;
+        tty.deinit();
+    }
 
     try tty.enableAndResetAlternativeScreen();
     try tty.stdout.print("winsize: {any}\n", .{tty.getWinsize()});
     try tty.stdout.print("caps: {any}\n", .{tty.caps});
-    try tty.writeHyperlink(.{ .uri = "https://google.com" }, "google");
+    try tty.writeHyperlink(.{ .uri = "https://google.com", .id = "" }, "google");
     try tty.stdout.writeByte('\n');
     try tty.flush();
 
