@@ -276,23 +276,34 @@ pub const Terminal = struct {
 };
 
 pub const Text = struct {
-    // text sizing
-    pub const scaled_text = OSC ++ "66;s={d}:w={d};{s}" ++ ST;
-    pub fn scaled(writer: *std.Io.Writer, scale: u3, width: u3, content: []const u8) !void {
+    pub const end_scaled_or_explicit_width = ST;
+
+    pub const introduce_scaled_text = OSC ++ "66;s={d}:w={d};";
+    pub fn introduceScaled(writer: *std.Io.Writer, scale: u3, width: u3) !void {
         assert(1 <= scale);
-        return writer.print(scaled_text, .{ scale, width, content });
+        return writer.print(introduce_scaled_text, .{ scale, width });
     }
 
-    pub const scaled_text_with_fractions = OSC ++ "66;s={d}:w={d}:n={d}:d={d}:v={d};{s}" ++ ST;
-    pub fn scaledWithFractions(writer: *std.Io.Writer, scale: u3, width: u3, numerator: u4, denominator: u4, vertical_align: u2, content: []const u8) !void {
+    pub const introduce_scaled_text_with_fractions = OSC ++ "66;s={d}:w={d}:n={d}:d={d}:v={d}:h={d};";
+    pub fn introduceScaledWithFractions(writer: *std.Io.Writer, scale: u3, width: u3, numerator: u4, denominator: u4, vertical_align: VerticalAlign, horizontal_align: HorizontalAlign) !void {
         assert(1 <= scale);
-        assert(vertical_align <= 2);
-        return writer.print(scaled_text_with_fractions, .{ scale, width, numerator, denominator, vertical_align, content });
+        assert(denominator == 0 or denominator > numerator);
+        return writer.print(introduce_scaled_text_with_fractions, .{ scale, width, numerator, denominator, @intFromEnum(vertical_align), @intFromEnum(horizontal_align) });
     }
+    pub const VerticalAlign = enum(u2) {
+        top = 0,
+        bottom = 1,
+        centered = 2,
+    };
+    pub const HorizontalAlign = enum(u2) {
+        left = 0,
+        right = 1,
+        centered = 2,
+    };
 
-    pub const explicit_width = OSC ++ "66;w={d};{s}" ++ ST;
-    pub fn explicitWidth(writer: *std.Io.Writer, width: u3, content: []const u8) !void {
-        return writer.print(explicit_width, .{ width, content });
+    pub const introduce_explicit_width = OSC ++ "66;w={d};";
+    pub fn introduceExplicitWidth(writer: *std.Io.Writer, width: u3) !void {
+        return writer.print(introduce_explicit_width, .{width});
     }
 };
 

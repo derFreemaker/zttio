@@ -26,9 +26,10 @@ from [libvaxis](https://github.com/rockorager/libvaxis/tree/11f53c701ae6b5633582
 - [Unicode Core](https://github.com/contour-terminal/terminal-unicode-core) (Mode 2027)
 - Color Mode Updates (Mode 2031)
 - [In-Band Resize Events](https://gist.github.com/rockorager/e695fb2924d36b2bcf1fff4a3704bd83) (Mode 2048)
+- Synchronized Output (Mode 2026)
+- [Scaled Text](https://sw.kovidgoyal.net/kitty/text-sizing-protocol) (OSC 66)
+- [Explicit Width](https://sw.kovidgoyal.net/kitty/text-sizing-protocol) (OSC 66)
 
-[//]: # (- Synchronized Output &#40;Mode 2026&#41;)
-[//]: # (- [Explicit Width]&#40;https://github.com/kovidgoyal/kitty/blob/master/docs/text-sizing-protocol.rst&#41;)
 [//]: # (- Images &#40;kitty, sixel, ...&#41;)
 
 ## Dependencies
