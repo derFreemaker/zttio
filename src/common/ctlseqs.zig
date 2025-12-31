@@ -41,42 +41,42 @@ pub const Cursor = struct {
     pub const home = CSI ++ "H";
 
     pub const move_to_line_column = CSI ++ "{d};{d}H";
-    pub fn moveTo(writer: *std.Io.Writer, row: usize, column: usize) !void {
+    pub fn moveTo(writer: *std.Io.Writer, row: usize, column: usize) std.Io.Writer.Error!void {
         return writer.print(move_to_line_column, .{ row, column });
     }
 
     pub const move_up_x = CSI ++ "{d}A";
-    pub fn moveUp(writer: *std.Io.Writer, num: usize) !void {
+    pub fn moveUp(writer: *std.Io.Writer, num: usize) std.Io.Writer.Error!void {
         return writer.print(move_up_x, .{num});
     }
 
     pub const move_down_x = CSI ++ "{d}B";
-    pub fn moveDown(writer: *std.Io.Writer, num: usize) !void {
+    pub fn moveDown(writer: *std.Io.Writer, num: usize) std.Io.Writer.Error!void {
         return writer.print(move_down_x, .{num});
     }
 
     pub const move_right_x = CSI ++ "{d}C";
-    pub fn moveRight(writer: *std.Io.Writer, num: usize) !void {
+    pub fn moveRight(writer: *std.Io.Writer, num: usize) std.Io.Writer.Error!void {
         return writer.print(move_right_x, .{num});
     }
 
     pub const move_left_x = CSI ++ "{d}D";
-    pub fn moveLeft(writer: *std.Io.Writer, num: usize) !void {
+    pub fn moveLeft(writer: *std.Io.Writer, num: usize) std.Io.Writer.Error!void {
         return writer.print(move_left_x, .{num});
     }
 
     pub const move_front_down_x = CSI ++ "{d}E";
-    pub fn moveFrontDown(writer: *std.Io.Writer, num: usize) !void {
+    pub fn moveFrontDown(writer: *std.Io.Writer, num: usize) std.Io.Writer.Error!void {
         return writer.print(move_front_down_x, .{num});
     }
 
     pub const move_front_up_x = CSI ++ "{d}F";
-    pub fn moveFrontUp(writer: *std.Io.Writer, num: usize) !void {
+    pub fn moveFrontUp(writer: *std.Io.Writer, num: usize) std.Io.Writer.Error!void {
         return writer.print(move_front_up_x, .{num});
     }
 
     pub const move_to_column = CSI ++ "{d}G";
-    pub fn moveToColumn(writer: *std.Io.Writer, num: usize) !void {
+    pub fn moveToColumn(writer: *std.Io.Writer, num: usize) std.Io.Writer.Error!void {
         return writer.print(move_to_column, .{num});
     }
 
@@ -89,7 +89,7 @@ pub const Cursor = struct {
     pub const show_cursor = CSI ++ "?25h";
 
     pub const set_cursor_shape = CSI ++ "{d} q";
-    pub fn setCursorShape(writer: *std.Io.Writer, shape: Shape) !void {
+    pub fn setCursorShape(writer: *std.Io.Writer, shape: Shape) std.Io.Writer.Error!void {
         return writer.print(set_cursor_shape, .{@intFromEnum(shape)});
     }
     pub const Shape = enum(u8) {
@@ -128,7 +128,7 @@ pub const Hyperlink = struct {
     uri: []const u8,
     params: Params = .{},
 
-    pub fn introduce(self: Hyperlink, writer: *std.Io.Writer) !void {
+    pub fn introduce(self: Hyperlink, writer: *std.Io.Writer) std.Io.Writer.Error!void {
         try writer.writeAll(OSC ++ "8;");
 
         if (self.params.id) |id| {
@@ -192,7 +192,7 @@ pub const Terminal = struct {
     // keyboard handling
     pub const kitty_keyboard_handling_reset = CSI ++ "<u";
     pub const kitty_keyboard_handling_set_x = CSI ++ ">{d}u";
-    pub fn setKittyKeyboardHandling(writer: *std.Io.Writer, detail: Terminal.KittyKeyboardFlags) !void {
+    pub fn setKittyKeyboardHandling(writer: *std.Io.Writer, detail: Terminal.KittyKeyboardFlags) std.Io.Writer.Error!void {
         const flag_int: u5 = @bitCast(detail);
         return writer.print(kitty_keyboard_handling_set_x, .{flag_int});
     }
@@ -215,7 +215,7 @@ pub const Terminal = struct {
     // notify
     pub const notify_x = OSC ++ "9;{s}" ++ ST;
     pub const notify_title_x = OSC ++ "777;notify;{s};{s}" ++ ST;
-    pub fn notify(writer: *std.Io.Writer, title: ?[]const u8, msg: []const u8) !void {
+    pub fn notify(writer: *std.Io.Writer, title: ?[]const u8, msg: []const u8) std.Io.Writer.Error!void {
         if (title) |t| {
             return writer.print(notify_title_x, .{ t, msg });
         }
@@ -225,7 +225,7 @@ pub const Terminal = struct {
 
     // progress
     pub const progress_type_x = OSC ++ "9;4;{d};{d}" ++ ST;
-    pub fn progress(writer: *std.Io.Writer, state: Progress) !void {
+    pub fn progress(writer: *std.Io.Writer, state: Progress) std.Io.Writer.Error!void {
         switch (state) {
             .none => return writer.print(progress_type_x, .{ 0, 0 }),
             .in_progress => |v| {
@@ -253,7 +253,7 @@ pub const Terminal = struct {
 
     // clipboard
     pub const clipboard_copy_x = OSC ++ "52;c;{s}" ++ ST;
-    pub fn copyToClipboard(writer: *std.Io.Writer, encoder_allocator: std.mem.Allocator, content: []const u8) !void {
+    pub fn copyToClipboard(writer: *std.Io.Writer, encoder_allocator: std.mem.Allocator, content: []const u8) std.Io.Writer.Error!void {
         const encoder = std.base64.standard.Encoder;
 
         const size = encoder.calcSize(content.len);
@@ -268,12 +268,12 @@ pub const Terminal = struct {
 
     // misc
     pub const title_set_x = OSC ++ "0;{s}" ++ ST;
-    pub fn setTitle(writer: *std.Io.Writer, title: []const u8) !void {
+    pub fn setTitle(writer: *std.Io.Writer, title: []const u8) std.Io.Writer.Error!void {
         return writer.print(title_set_x, .{title});
     }
 
     pub const cd_x = OSC ++ "7;file://{s}" ++ ST;
-    pub fn cd(writer: *std.Io.Writer, dir: []const u8) !void {
+    pub fn cd(writer: *std.Io.Writer, dir: []const u8) std.Io.Writer.Error!void {
         return writer.print(cd_x, .{dir});
     }
 };
@@ -281,7 +281,7 @@ pub const Terminal = struct {
 pub const Text = struct {
     pub const end_scaled_or_explicit_width = ST;
 
-    pub fn introduceScaled(writer: *std.Io.Writer, scaled: Scaled) !void {
+    pub fn introduceScaled(writer: *std.Io.Writer, scaled: Scaled) std.Io.Writer.Error!void {
         try writer.writeAll(OSC ++ "66;");
 
         assert(1 <= scaled.scale);
@@ -331,7 +331,7 @@ pub const Text = struct {
     };
 
     pub const introduce_explicit_width = OSC ++ "66;w={d};";
-    pub fn introduceExplicitWidth(writer: *std.Io.Writer, width: u3) !void {
+    pub fn introduceExplicitWidth(writer: *std.Io.Writer, width: u3) std.Io.Writer.Error!void {
         return writer.print(introduce_explicit_width, .{width});
     }
 };

@@ -211,7 +211,7 @@
 //     }
 // }
 // 
-// pub fn erase(writer: *std.Io.Writer, opts: EraseOptions) error{WriteFailed}!void {
+// pub fn erase(writer: *std.Io.Writer, opts: EraseOptions) std.Io.Writer.Error!void {
 //     try writer.writeAll(ctlseqs.KittyGraphics.introducer ++ "a=d,d=");
 // 
 //     switch (opts) {
@@ -315,7 +315,7 @@
 //     };
 // };
 // 
-// pub fn writeOptionFlags(writer: *std.Io.Writer, flags: anytype) error{WriteFailed}!void {
+// pub fn writeOptionFlags(writer: *std.Io.Writer, flags: anytype) std.Io.Writer.Error!void {
 //     const FlagsT = @TypeOf(flags);
 //     if (@typeInfo(FlagsT) != .@"struct" and !@typeInfo(FlagsT).@"struct".is_tuple) @compileError(std.fmt.comptimePrint("expected a struct (T: {s}) as flags set", .{@typeName(FlagsT)}));
 //     const info = @typeInfo(FlagsT).@"struct";
@@ -362,7 +362,7 @@
 //     id: u32,
 //     num: u32,
 // 
-//     pub inline fn writeTo(self: IdOrNum, writer: *std.Io.Writer) error{WriteFailed}!void {
+//     pub inline fn writeTo(self: IdOrNum, writer: *std.Io.Writer) std.Io.Writer.Error!void {
 //         const key: u8 = switch (self) {
 //             .id => 'i',
 //             .num => 'I',

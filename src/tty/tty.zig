@@ -164,45 +164,45 @@ pub inline fn nextEvent(self: *Tty) Event {
     return self.reader.nextEvent();
 }
 
-pub inline fn flush(self: *Tty) !void {
+pub inline fn flush(self: *Tty) std.Io.Writer.Error!void {
     return self.stdout.flush();
 }
 
-pub fn requestClipboard(self: *Tty) error{WriteFailed}!void {
+pub fn requestClipboard(self: *Tty) std.Io.Writer.Error!void {
     return self.stdout.writeAll(ctlseqs.Terminal.clipboard_request);
 }
 
-pub fn notify(self: *Tty, title: ?[]const u8, msg: []const u8) !void {
+pub fn notify(self: *Tty, title: ?[]const u8, msg: []const u8) std.Io.Writer.Error!void {
     return ctlseqs.Terminal.notify(self.stdout, title, msg);
 }
 
-pub fn setProgressIndicator(self: *Tty, state: ctlseqs.Terminal.Progress) !void {
+pub fn setProgressIndicator(self: *Tty, state: ctlseqs.Terminal.Progress) std.Io.Writer.Error!void {
     return ctlseqs.Terminal.progress(self.stdout, state);
 }
 
-pub fn setTitle(self: *Tty, title: []const u8) !void {
+pub fn setTitle(self: *Tty, title: []const u8) std.Io.Writer.Error!void {
     return ctlseqs.Terminal.setTitle(self.stdout, title);
 }
 
-pub fn changeCurrentWorkingDirectory(self: *Tty, path: []const u8) !void {
+pub fn changeCurrentWorkingDirectory(self: *Tty, path: []const u8) std.Io.Writer.Error!void {
     std.debug.assert(std.fs.path.isAbsolute(path));
     return ctlseqs.Terminal.cd(self.stdout, path);
 }
 
-pub fn saveScreen(self: *Tty) error{WriteFailed}!void {
+pub fn saveScreen(self: *Tty) std.Io.Writer.Error!void {
     return self.stdout.writeAll(ctlseqs.Screen.save);
 }
 
-pub fn restoreScreen(self: *Tty) error{WriteFailed}!void {
+pub fn restoreScreen(self: *Tty) std.Io.Writer.Error!void {
     return self.stdout.writeAll(ctlseqs.Screen.restore);
 }
 
-pub fn resetScreen(self: *Tty) error{WriteFailed}!void {
+pub fn resetScreen(self: *Tty) std.Io.Writer.Error!void {
     try self.clearScreen(.entire);
     try self.moveCursor(.home);
 }
 
-pub fn clearScreen(self: *Tty, mode: ClearScreenMode) error{WriteFailed}!void {
+pub fn clearScreen(self: *Tty, mode: ClearScreenMode) std.Io.Writer.Error!void {
     switch (mode) {
         .entire => {
             try self.clearScrollback();
@@ -222,24 +222,24 @@ pub const ClearScreenMode = enum {
     after_cursor,
 };
 
-pub fn clearScrollback(self: *Tty) error{WriteFailed}!void {
+pub fn clearScrollback(self: *Tty) std.Io.Writer.Error!void {
     return self.stdout.writeAll(ctlseqs.Erase.scroll_back);
 }
 
-pub fn enableAlternativeScreen(self: *Tty) error{WriteFailed}!void {
+pub fn enableAlternativeScreen(self: *Tty) std.Io.Writer.Error!void {
     return self.stdout.writeAll(ctlseqs.Screen.alternative_enable);
 }
 
-pub fn disableAlternativeScreen(self: *Tty) error{WriteFailed}!void {
+pub fn disableAlternativeScreen(self: *Tty) std.Io.Writer.Error!void {
     return self.stdout.writeAll(ctlseqs.Screen.alternative_disable);
 }
 
-pub fn enableAndResetAlternativeScreen(self: *Tty) error{WriteFailed}!void {
+pub fn enableAndResetAlternativeScreen(self: *Tty) std.Io.Writer.Error!void {
     try self.enableAlternativeScreen();
     try self.resetScreen();
 }
 
-pub fn setMouseEvents(self: *Tty, enable: bool) error{WriteFailed}!void {
+pub fn setMouseEvents(self: *Tty, enable: bool) std.Io.Writer.Error!void {
     if (!enable) {
         return self.stdout.writeAll(ctlseqs.Terminal.mouse_reset);
     }
@@ -251,19 +251,19 @@ pub fn setMouseEvents(self: *Tty, enable: bool) error{WriteFailed}!void {
     }
 }
 
-pub fn saveCursorPos(self: *Tty) error{WriteFailed}!void {
+pub fn saveCursorPos(self: *Tty) std.Io.Writer.Error!void {
     return self.stdout.writeAll(ctlseqs.Cursor.save_position);
 }
 
-pub fn restoreCursorPos(self: *Tty) error{WriteFailed}!void {
+pub fn restoreCursorPos(self: *Tty) std.Io.Writer.Error!void {
     return self.stdout.writeAll(ctlseqs.Cursor.restore_position);
 }
 
-pub fn setCursorShape(self: *Tty, shape: ctlseqs.Cursor.Shape) error{WriteFailed}!void {
+pub fn setCursorShape(self: *Tty, shape: ctlseqs.Cursor.Shape) std.Io.Writer.Error!void {
     return ctlseqs.Cursor.setCursorShape(self.stdout, shape);
 }
 
-pub fn moveCursor(self: *Tty, move_cursor: MoveCursor) error{WriteFailed}!void {
+pub fn moveCursor(self: *Tty, move_cursor: MoveCursor) std.Io.Writer.Error!void {
     const cursor = ctlseqs.Cursor;
 
     switch (move_cursor) {
@@ -328,11 +328,11 @@ pub const MoveCursor = union(enum) {
     };
 };
 
-pub fn setStyling(self: *Tty, style: ctlseqs.Styling) error{WriteFailed}!void {
+pub fn setStyling(self: *Tty, style: ctlseqs.Styling) std.Io.Writer.Error!void {
     return self.stdout.print("{f}", .{style});
 }
 
-pub fn clearLine(self: *Tty, mode: ClearLineMode) error{WriteFailed}!void {
+pub fn clearLine(self: *Tty, mode: ClearLineMode) std.Io.Writer.Error!void {
     switch (mode) {
         .entire => {
             return self.stdout.writeAll(ctlseqs.Erase.line);
@@ -351,38 +351,38 @@ pub const ClearLineMode = enum {
     after_cursor,
 };
 
-pub fn resetLine(self: *Tty) error{WriteFailed}!void {
+pub fn resetLine(self: *Tty) std.Io.Writer.Error!void {
     try self.clearLine(.entire);
     try self.moveCursor(.front);
 }
 
-pub fn writeHyperlink(self: *Tty, hyperlink: ctlseqs.Hyperlink, text: []const u8) error{WriteFailed}!void {
+pub fn writeHyperlink(self: *Tty, hyperlink: ctlseqs.Hyperlink, text: []const u8) std.Io.Writer.Error!void {
     try hyperlink.introduce(self.stdout);
     try self.stdout.writeAll(text);
     try self.stdout.writeAll(ctlseqs.Hyperlink.reset);
 }
 
-pub fn startSync(self: *Tty) error{WriteFailed}!void {
+pub fn startSync(self: *Tty) std.Io.Writer.Error!void {
     return self.stdout.writeAll(ctlseqs.Terminal.sync_begin);
 }
 
-pub fn endSync(self: *Tty) error{WriteFailed}!void {
+pub fn endSync(self: *Tty) std.Io.Writer.Error!void {
     return self.stdout.writeAll(ctlseqs.Terminal.sync_end);
 }
 
-pub fn beginScaledText(self: *Tty, scaled: ctlseqs.Text.Scaled) error{WriteFailed}!void {
+pub fn beginScaledText(self: *Tty, scaled: ctlseqs.Text.Scaled) std.Io.Writer.Error!void {
     return ctlseqs.Text.introduceScaled(self.stdout, scaled);
 }
 
-pub fn endScaledText(self: *Tty) error{WriteFailed}!void {
+pub fn endScaledText(self: *Tty) std.Io.Writer.Error!void {
     return self.stdout.writeAll(ctlseqs.Text.end_scaled_or_explicit_width);
 }
 
-pub fn beginExplicitWidthText(self: *Tty, width: u3) error{WriteFailed}!void {
+pub fn beginExplicitWidthText(self: *Tty, width: u3) std.Io.Writer.Error!void {
     return ctlseqs.Text.introduceExplicitWidth(self.stdout, width);
 }
 
-pub fn endExplicitWidthText(self: *Tty) error{WriteFailed}!void {
+pub fn endExplicitWidthText(self: *Tty) std.Io.Writer.Error!void {
     return self.stdout.writeAll(ctlseqs.Text.end_scaled_or_explicit_width);
 }
 
