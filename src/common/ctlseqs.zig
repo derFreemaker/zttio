@@ -5,10 +5,13 @@ const ListSeparator = @import("list_separator.zig");
 const Key = @import("key.zig");
 
 pub const ESC = "\x1b";
+pub const SS2 = ESC ++ "N";
+pub const SS3 = ESC ++ "O";
 pub const CSI = ESC ++ "[";
 pub const DCS = ESC ++ "P";
 pub const OSC = ESC ++ "]";
 pub const APC = ESC ++ "_";
+
 pub const ST = ESC ++ "\\";
 pub const BEL = "\x07";
 
@@ -175,7 +178,7 @@ pub const Terminal = struct {
     pub const color_scheme_reset = CSI ++ "?2031l";
 
     // multi cursor
-    pub const MultiCursor = struct {
+    pub const KittyMultiCursorFlags = struct {
         block: bool = false,
         beam: bool = false,
         underline: bool = false,

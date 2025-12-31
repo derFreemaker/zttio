@@ -83,6 +83,10 @@ _completely ignored_
   - ``?...u`` -> capability response ignored 
   - ``...u`` -> key event
 
+### [Kitty Multi Cursor]()
+- ``... q``
+  - ``> ``
+
 ## OSC
 **Introducer:** ``ESC ]``
 

@@ -7,95 +7,23 @@ const Event = common.Event;
 const Key = common.Key;
 const Mouse = common.Mouse;
 const Winsize = common.Winsize;
+const MultiCursor = common.MultiCursor;
 const ctlseqs = common.cltseqs;
 
 const log = std.log.scoped(.zttio_tty_parser);
 
 const Parser = @This();
 
-/// The return type of our parse method. Contains an Event and the number of
-/// bytes read from the buffer.
-pub const Result = struct {
-    parse: Parse,
-    n: usize,
-
-    pub const none = Result{
-        .parse = .none,
-        .n = 0,
-    };
-
-    pub fn skip(n: usize) Result {
-        return Result{
-            .parse = .skip,
-            .n = n,
-        };
-    }
-
-    pub const Parse = union(enum) {
-        none,
-        skip,
-        event: Event,
-
-        paste_start,
-        paste_end,
-
-        // cap_kitty_graphics,
-        // cap_kitty_keyboard,
-        // cap_da1,
-        // cap_sgr_pixels,
-        // cap_unicode_width,
-        // cap_color_scheme_updates,
-        // cap_multi_cursor,
-    };
-};
-
-const mouse_bits = struct {
-    const motion: u8 = 0b00100000;
-    const buttons: u8 = 0b11000011;
-    const shift: u8 = 0b00000100;
-    const alt: u8 = 0b00001000;
-    const ctrl: u8 = 0b00010000;
-    const leave: u16 = 0b100000000;
-};
-
-allocator: std.mem.Allocator,
-buf: []u8,
+arena: std.heap.ArenaAllocator,
 
 pub fn init(allocator: std.mem.Allocator) Parser {
     return Parser{
-        .allocator = allocator,
-        .buf = &.{},
+        .arena = .init(allocator),
     };
 }
 
 pub fn deinit(self: *Parser) void {
-    self.allocator.free(self.buf);
-}
-
-fn ensureCapacity(self: *Parser, minimum: usize) error{OutOfMemory}!void {
-    if (self.buf.len >= minimum) {
-        return;
-    }
-
-    const init_capacity = @as(comptime_int, @max(1, std.atomic.cache_line / @sizeOf(u8)));
-    const new = blk: {
-        var new = self.buf.len;
-        while (true) {
-            new +|= new / 2 + init_capacity;
-            if (new >= minimum)
-                break :blk new;
-        }
-    };
-
-    const old_memory = self.buf;
-    if (self.allocator.remap(old_memory, new)) |new_memory| {
-        self.buf = new_memory;
-    } else {
-        const new_memory = try self.allocator.alignedAlloc(u8, std.mem.Alignment.of(u8), new);
-        @memcpy(new_memory[0..self.buf.len], self.buf);
-        self.allocator.free(old_memory);
-        self.buf = new_memory;
-    }
+    self.arena.deinit();
 }
 
 /// Parse the first event from the input buffer. If a completion event is not
@@ -103,8 +31,11 @@ fn ensureCapacity(self: *Parser, minimum: usize) error{OutOfMemory}!void {
 ///
 /// If an unknown event is found, Result.event will be null and Result.n will be
 /// greater than 0
-pub fn parse(self: *Parser, input: []const u8) !Result {
+pub fn parse(self: *Parser, input: []const u8) !ParseResult {
     std.debug.assert(input.len > 0);
+
+    // clear any used memory from previous ParseResult
+    _ = self.arena.reset(.retain_capacity);
 
     // We gate this for len > 1 so we can detect singular escape key presses
     if (input[0] == 0x1b and input.len > 1) {
@@ -123,17 +54,14 @@ pub fn parse(self: *Parser, input: []const u8) !Result {
                     .codepoint = input[1],
                     .mods = .{ .alt = true },
                 };
-                return .{
-                    .parse = .{ .event = .{ .key_press = key } },
-                    .n = 2,
-                };
+                return .event(2, Event{ .key_press = key });
             },
         }
-    } else return parseGround(input);
+    } else return parseNormal(input);
 }
 
 /// Parse ground state
-fn parseGround(input: []const u8) !Result {
+fn parseNormal(input: []const u8) !ParseResult {
     std.debug.assert(input.len > 0);
 
     const b = input[0];
@@ -161,9 +89,8 @@ fn parseGround(input: []const u8) !Result {
         0x7F => .{ .codepoint = Key.backspace },
         else => blk: {
             var iter = uucode.utf8.Iterator.init(input);
-            // return null if we don't have a valid codepoint
-            const first_cp = iter.next() orelse return error.InvalidUTF8;
 
+            const first_cp = iter.next() orelse return error.InvalidUTF8;
             n = std.unicode.utf8CodepointSequenceLength(first_cp) catch return error.InvalidUTF8;
 
             // Check if we have a multi-codepoint grapheme
@@ -171,7 +98,6 @@ fn parseGround(input: []const u8) !Result {
             var grapheme_iter = uucode.grapheme.Iterator(uucode.utf8.Iterator).init(.init(input));
             var grapheme_len: usize = 0;
             var cp_count: usize = 0;
-
             while (grapheme_iter.next()) |result| {
                 cp_count += 1;
                 if (result.is_break) {
@@ -192,20 +118,17 @@ fn parseGround(input: []const u8) !Result {
         },
     };
 
-    return .{
-        .parse = .{ .event = .{ .key_press = key } },
-        .n = n,
-    };
+    return .event(n, Event{ .key_press = key });
 }
 
-fn parseSs2(input: []const u8) Result {
+fn parseSs2(input: []const u8) ParseResult {
     if (input.len < 3) return .none;
 
     if (input[2] == 0x1B) return .skip(2);
     return .skip(3);
 }
 
-fn parseSs3(input: []const u8) Result {
+fn parseSs3(input: []const u8) ParseResult {
     if (input.len < 3) return .none;
 
     const key: Key = switch (input[2]) {
@@ -225,14 +148,11 @@ fn parseSs3(input: []const u8) Result {
             return .skip(3);
         },
     };
-    return .{
-        .parse = .{ .event = .{ .key_press = key } },
-        .n = 3,
-    };
+    return .event(3, Event{ .key_press = key });
 }
 
 /// Skips sequences until we see an ST (String Terminator, ESC \)
-fn skipUntilST(input: []const u8) Result {
+fn skipUntilST(input: []const u8) ParseResult {
     if (input.len < 3) return .none;
 
     var chunker = std.mem.window(u8, input[2..], 2, 1);
@@ -249,7 +169,7 @@ fn skipUntilST(input: []const u8) Result {
 }
 
 /// Parses an OSC sequence
-fn parseOsc(self: *Parser, input: []const u8) !Result {
+fn parseOsc(self: *Parser, input: []const u8) !ParseResult {
     if (input.len < 3) {
         return .none;
     }
@@ -269,7 +189,7 @@ fn parseOsc(self: *Parser, input: []const u8) !Result {
     // The complete OSC sequence
     const sequence = input[0..end];
 
-    const null_event: Result = .skip(sequence.len);
+    const null_event: ParseResult = .skip(sequence.len);
 
     const semicolon_idx = std.mem.indexOfScalarPos(u8, input, 2, ';') orelse return null_event;
     const ps = std.fmt.parseUnsigned(u8, input[2..semicolon_idx], 10) catch return null_event;
@@ -288,10 +208,7 @@ fn parseOsc(self: *Parser, input: []const u8) !Result {
                 .kind = .{ .index = ps_idx },
                 .color = color,
             };
-            return .{
-                .parse = .{ .event = .{ .color_report = event } },
-                .n = sequence.len,
-            };
+            return .event(sequence.len, Event{ .color_report = event });
         },
         10,
         11,
@@ -312,10 +229,7 @@ fn parseOsc(self: *Parser, input: []const u8) !Result {
                 },
                 .color = color,
             };
-            return .{
-                .parse = .{ .event = .{ .color_report = event } },
-                .n = sequence.len,
-            };
+            return .event(sequence.len, Event{ .color_report = event });
         },
         52 => {
             if (input[semicolon_idx + 1] != 'c') return null_event;
@@ -325,22 +239,18 @@ fn parseOsc(self: *Parser, input: []const u8) !Result {
                 input[semicolon_idx + 3 .. sequence.len - 2];
             const decoder = std.base64.standard.Decoder;
             const payload_size = try decoder.calcSizeForSlice(payload);
-            try self.ensureCapacity(payload_size);
-            const text = self.buf[0..payload_size];
 
+            const text = try self.arena.allocator().alloc(u8, payload_size);
             try decoder.decode(text, payload);
             log.debug("decoded paste: {s}", .{text});
 
-            return .{
-                .parse = .{ .event = .{ .paste = text } },
-                .n = sequence.len,
-            };
+            return .event(sequence.len, Event{ .paste = text });
         },
         else => return null_event,
     }
 }
 
-fn parseCsi(self: *Parser, input: []const u8) error{OutOfMemory}!Result {
+fn parseCsi(self: *Parser, input: []const u8) error{OutOfMemory}!ParseResult {
     if (input.len < 3) {
         return .none;
     }
@@ -351,7 +261,7 @@ fn parseCsi(self: *Parser, input: []const u8) error{OutOfMemory}!Result {
             else => continue,
         }
     } else return .none;
-    const null_event: Result = .skip(sequence.len);
+    const skip: ParseResult = .skip(sequence.len);
 
     const final = sequence[sequence.len - 1];
     switch (final) {
@@ -380,7 +290,7 @@ fn parseCsi(self: *Parser, input: []const u8) error{OutOfMemory}!Result {
                     'Q' => Key.f2,
                     'R' => Key.f3,
                     'S' => Key.f4,
-                    else => return null_event,
+                    else => return skip,
                 },
             };
 
@@ -389,7 +299,7 @@ fn parseCsi(self: *Parser, input: []const u8) error{OutOfMemory}!Result {
                 const field_buf = field_iter.next() orelse break :field2;
                 var param_iter = std.mem.splitScalar(u8, field_buf, ':');
                 const modifier_buf = param_iter.next() orelse unreachable;
-                const modifier_mask = parseParam(u8, modifier_buf, 1) orelse return null_event;
+                const modifier_mask = parseParam(u8, modifier_buf, 1) orelse return skip;
                 key.mods = @bitCast(modifier_mask -| 1);
 
                 if (param_iter.next()) |event_type_buf| {
@@ -402,19 +312,19 @@ fn parseCsi(self: *Parser, input: []const u8) error{OutOfMemory}!Result {
                 const field_buf = field_iter.next() orelse break :field3;
                 var param_iter = std.mem.splitScalar(u8, field_buf, ':');
                 var total: usize = 0;
+                var text_buf: std.ArrayList(u8) = .empty;
                 while (param_iter.next()) |cp_buf| {
-                    const cp = parseParam(u21, cp_buf, null) orelse return null_event;
-                    try self.ensureCapacity(total + 4);
-                    total += std.unicode.utf8Encode(cp, self.buf[total..]) catch return null_event;
+                    const cp = parseParam(u21, cp_buf, null) orelse return skip;
+                    const cp_utf8_len = std.unicode.utf8CodepointSequenceLength(cp) catch unreachable;
+
+                    const cp_text_buf = try text_buf.addManyAsSlice(self.arena.allocator(), cp_utf8_len);
+                    total += std.unicode.utf8Encode(cp, cp_text_buf) catch return skip;
                 }
-                key.text = self.buf[0..total];
+                key.text = text_buf.items;
             }
 
             const event: Event = if (is_release) .{ .key_release = key } else .{ .key_press = key };
-            return .{
-                .parse = .{ .event = event },
-                .n = sequence.len,
-            };
+            return .event(sequence.len, event);
         },
         '~' => {
             // Legacy keys
@@ -423,7 +333,7 @@ fn parseCsi(self: *Parser, input: []const u8) error{OutOfMemory}!Result {
             // CSI number ; modifier:event_type ; text_as_codepoint ~
             var field_iter = std.mem.splitScalar(u8, sequence[2 .. sequence.len - 1], ';');
             const number_buf = field_iter.next() orelse unreachable; // always will have one field
-            const number = parseParam(u16, number_buf, null) orelse return null_event;
+            const number = parseParam(u16, number_buf, null) orelse return skip;
 
             var key: Key = .{
                 .codepoint = switch (number) {
@@ -448,7 +358,7 @@ fn parseCsi(self: *Parser, input: []const u8) error{OutOfMemory}!Result {
                     200 => return .{ .parse = .paste_start, .n = sequence.len },
                     201 => return .{ .parse = .paste_end, .n = sequence.len },
                     57427 => Key.kp_begin,
-                    else => return null_event,
+                    else => return skip,
                 },
             };
 
@@ -458,7 +368,7 @@ fn parseCsi(self: *Parser, input: []const u8) error{OutOfMemory}!Result {
                 const field_buf = field_iter.next() orelse break :field2;
                 var param_iter = std.mem.splitScalar(u8, field_buf, ':');
                 const modifier_buf = param_iter.next() orelse unreachable;
-                const modifier_mask = parseParam(u8, modifier_buf, 1) orelse return null_event;
+                const modifier_mask = parseParam(u8, modifier_buf, 1) orelse return skip;
                 key.mods = @bitCast(modifier_mask -| 1);
 
                 if (param_iter.next()) |event_type_buf| {
@@ -471,19 +381,19 @@ fn parseCsi(self: *Parser, input: []const u8) error{OutOfMemory}!Result {
                 const field_buf = field_iter.next() orelse break :field3;
                 var param_iter = std.mem.splitScalar(u8, field_buf, ':');
                 var total: usize = 0;
+                var text_buf: std.ArrayList(u8) = .empty;
                 while (param_iter.next()) |cp_buf| {
-                    const cp = parseParam(u21, cp_buf, null) orelse return null_event;
-                    try self.ensureCapacity(total + 4);
-                    total += std.unicode.utf8Encode(cp, self.buf[total..]) catch return null_event;
+                    const cp = parseParam(u21, cp_buf, null) orelse return skip;
+                    const cp_utf8_len = std.unicode.utf8CodepointSequenceLength(cp) catch unreachable;
+
+                    const cp_text_buf = try text_buf.addManyAsSlice(self.arena.allocator(), cp_utf8_len);
+                    total += std.unicode.utf8Encode(cp, cp_text_buf) catch return skip;
                 }
-                key.text = self.buf[0..total];
+                key.text = text_buf.items;
             }
 
             const event: Event = if (is_release) .{ .key_release = key } else .{ .key_press = key };
-            return .{
-                .parse = .{ .event = event },
-                .n = sequence.len,
-            };
+            return .event(sequence.len, event);
         },
 
         'I' => return .{ .parse = .{ .event = .focus_in }, .n = sequence.len },
@@ -496,28 +406,26 @@ fn parseCsi(self: *Parser, input: []const u8) error{OutOfMemory}!Result {
             std.debug.assert(sequence.len >= 3);
             switch (sequence[2]) {
                 '?' => {
-                    const delim_idx = std.mem.indexOfScalarPos(u8, input, 3, ';') orelse return null_event;
-                    const ps = std.fmt.parseUnsigned(u16, input[3..delim_idx], 10) catch return null_event;
+                    const delim_idx = std.mem.indexOfScalarPos(u8, input, 3, ';') orelse return skip;
+                    const ps = std.fmt.parseUnsigned(u16, input[3..delim_idx], 10) catch return skip;
                     switch (ps) {
                         997 => {
                             // Color scheme update (CSI 997 ; Ps n)
                             // See https://github.com/contour-terminal/contour/blob/master/docs/vt-extensions/color-palette-update-notifications.md
                             switch (sequence[delim_idx + 1]) {
-                                '1' => return .{
-                                    .parse = .{ .event = .{ .color_scheme = .dark } },
-                                    .n = sequence.len,
-                                },
-                                '2' => return .{
-                                    .parse = .{ .event = .{ .color_scheme = .light } },
-                                    .n = sequence.len,
-                                },
-                                else => return null_event,
+                                '1' => return .event(sequence.len, Event{
+                                    .color_scheme = .dark,
+                                }),
+                                '2' => return .event(sequence.len, Event{
+                                    .color_scheme = .light,
+                                }),
+                                else => return skip,
                             }
                         },
-                        else => return null_event,
+                        else => return skip,
                     }
                 },
-                else => return null_event,
+                else => return skip,
             }
         },
         't' => {
@@ -528,23 +436,21 @@ fn parseCsi(self: *Parser, input: []const u8) error{OutOfMemory}!Result {
             if (std.mem.eql(u8, "48", ps)) {
                 // in band window resize
                 // CSI 48 ; height ; width ; height_pix ; width_pix t
-                const height_char = iter.next() orelse return null_event;
-                const width_char = iter.next() orelse return null_event;
+                const height_char = iter.next() orelse return skip;
+                const width_char = iter.next() orelse return skip;
                 const height_pix = iter.next() orelse "0";
                 const width_pix = iter.next() orelse "0";
 
                 const winsize: Winsize = .{
-                    .rows = std.fmt.parseUnsigned(u16, height_char, 10) catch return null_event,
-                    .cols = std.fmt.parseUnsigned(u16, width_char, 10) catch return null_event,
-                    .x_pixel = std.fmt.parseUnsigned(u16, width_pix, 10) catch return null_event,
-                    .y_pixel = std.fmt.parseUnsigned(u16, height_pix, 10) catch return null_event,
+                    .rows = std.fmt.parseUnsigned(u16, height_char, 10) catch return skip,
+                    .cols = std.fmt.parseUnsigned(u16, width_char, 10) catch return skip,
+                    .x_pixel = std.fmt.parseUnsigned(u16, width_pix, 10) catch return skip,
+                    .y_pixel = std.fmt.parseUnsigned(u16, height_pix, 10) catch return skip,
                 };
-                return .{
-                    .parse = .{ .event = .{ .winsize = winsize } },
-                    .n = sequence.len,
-                };
+
+                return .event(sequence.len, Event{ .winsize = winsize });
             }
-            return null_event;
+            return skip;
         },
         'u' => {
             // Kitty keyboard
@@ -553,7 +459,7 @@ fn parseCsi(self: *Parser, input: []const u8) error{OutOfMemory}!Result {
             // mandatory
 
             // ignore the capability response
-            if (sequence.len > 2 and sequence[2] == '?') return null_event;
+            if (sequence.len > 2 and sequence[2] == '?') return skip;
 
             var key: Key = .{
                 .codepoint = undefined,
@@ -566,7 +472,7 @@ fn parseCsi(self: *Parser, input: []const u8) error{OutOfMemory}!Result {
                 const field_buf = field_iter.next() orelse unreachable; // There will always be at least one field
                 var param_iter = std.mem.splitScalar(u8, field_buf, ':');
                 const codepoint_buf = param_iter.next() orelse unreachable;
-                key.codepoint = parseParam(u21, codepoint_buf, null) orelse return null_event;
+                key.codepoint = parseParam(u21, codepoint_buf, null) orelse return skip;
 
                 if (param_iter.next()) |shifted_cp_buf| {
                     key.shifted_codepoint = parseParam(u21, shifted_cp_buf, null);
@@ -583,7 +489,7 @@ fn parseCsi(self: *Parser, input: []const u8) error{OutOfMemory}!Result {
                 const field_buf = field_iter.next() orelse break :field2;
                 var param_iter = std.mem.splitScalar(u8, field_buf, ':');
                 const modifier_buf = param_iter.next() orelse unreachable;
-                const modifier_mask = parseParam(u8, modifier_buf, 1) orelse return null_event;
+                const modifier_mask = parseParam(u8, modifier_buf, 1) orelse return skip;
                 key.mods = @bitCast(modifier_mask -| 1);
 
                 if (param_iter.next()) |event_type_buf| {
@@ -596,12 +502,15 @@ fn parseCsi(self: *Parser, input: []const u8) error{OutOfMemory}!Result {
                 const field_buf = field_iter.next() orelse break :field3;
                 var param_iter = std.mem.splitScalar(u8, field_buf, ':');
                 var total: usize = 0;
+                var text_buf: std.ArrayList(u8) = .empty;
                 while (param_iter.next()) |cp_buf| {
-                    const cp = parseParam(u21, cp_buf, null) orelse return null_event;
-                    try self.ensureCapacity(total + 4);
-                    total += std.unicode.utf8Encode(cp, self.buf[total..]) catch return null_event;
+                    const cp = parseParam(u21, cp_buf, null) orelse return skip;
+                    const cp_utf8_len = std.unicode.utf8CodepointSequenceLength(cp) catch unreachable;
+
+                    const cp_text_buf = try text_buf.addManyAsSlice(self.arena.allocator(), cp_utf8_len);
+                    total += std.unicode.utf8Encode(cp, cp_text_buf) catch return skip;
                 }
-                key.text = self.buf[0..total];
+                key.text = text_buf.items;
             }
 
             {
@@ -620,9 +529,10 @@ fn parseCsi(self: *Parser, input: []const u8) error{OutOfMemory}!Result {
                 {
                     // Encode the codepoint as upper
                     const upper = std.ascii.toUpper(@intCast(key.codepoint));
-                    try self.ensureCapacity(4);
-                    const n = std.unicode.utf8Encode(upper, self.buf) catch unreachable;
-                    key.text = self.buf[0..n];
+                    const text_buf = try self.arena.allocator().alloc(u8, std.unicode.utf8CodepointSequenceLength(upper) catch unreachable);
+                    _ = std.unicode.utf8Encode(upper, text_buf) catch unreachable;
+
+                    key.text = text_buf;
                     key.shifted_codepoint = upper;
                 }
             }
@@ -632,9 +542,73 @@ fn parseCsi(self: *Parser, input: []const u8) error{OutOfMemory}!Result {
             else
                 .{ .key_press = key };
 
-            return .{ .parse = .{ .event = event }, .n = sequence.len };
+            return .event(sequence.len, event);
         },
-        else => return null_event,
+        'q' => {
+            // kitty multi cursor "CSI>... q" (TRAILER is " q")
+            // see https://sw.kovidgoyal.net/kitty/multiple-cursors-protocol/
+            if (sequence[2] != '>' or sequence[sequence.len - 2] != ' ') return skip;
+
+            var field_iter = std.mem.splitScalar(u8, sequence[3 .. sequence.len - 2], ';');
+            const report_num_buf = field_iter.next() orelse unreachable; // always will have one field
+            const report_num = parseParam(u8, report_num_buf, null) orelse return skip;
+
+            switch (report_num) {
+                100 => {
+                    const allocator = self.arena.allocator();
+                    var cursor_reports: std.ArrayList(MultiCursor.Report) = .empty;
+
+                    while (field_iter.next()) |cursor_report_buf| {
+                        var param_iter = std.mem.splitScalar(u8, cursor_report_buf, ':');
+                        const shape_buf = param_iter.next() orelse break;
+                        const shape_num = parseParam(u8, shape_buf, null) orelse break;
+                        const shape: MultiCursor.Shape = switch (shape_num) {
+                            @intFromEnum(MultiCursor.Shape.block) => .block,
+                            @intFromEnum(MultiCursor.Shape.beam) => .beam,
+                            @intFromEnum(MultiCursor.Shape.underline) => .underline,
+                            @intFromEnum(MultiCursor.Shape.follow_main) => .follow_main,
+                            else => break,
+                        };
+
+                        const pos = MultiCursor.Position.parse(param_iter.rest()) catch break;
+
+                        try cursor_reports.append(allocator, .{
+                            .shape = shape,
+                            .pos = pos,
+                        });
+                    }
+
+                    const cursor_reports_items = cursor_reports.items;
+                    return .event(sequence.len, Event{ .multi_cursors = cursor_reports_items });
+                },
+                101 => {
+                    const text_under_cursor_color_buf = field_iter.next() orelse return skip;
+                    var text_under_cursor_color_param_iter = std.mem.splitScalar(u8, text_under_cursor_color_buf, ':');
+
+                    const text_under_cursor_color_num_buf = text_under_cursor_color_param_iter.next() orelse return skip;
+                    const text_under_cursor_color_num = parseParam(u8, text_under_cursor_color_num_buf, null) orelse return skip;
+                    if (text_under_cursor_color_num != 30) return skip;
+
+                    const text_under_cursor_color_space = MultiCursor.ColorSpace.parse(text_under_cursor_color_param_iter.rest()) catch return skip;
+
+                    const cursor_color_buf = field_iter.next() orelse return skip;
+                    var cursor_color_param_iter = std.mem.splitScalar(u8, cursor_color_buf, ':');
+
+                    const cursor_color_num_buf = cursor_color_param_iter.next() orelse return skip;
+                    const cursor_color_num = parseParam(u8, cursor_color_num_buf, null) orelse return skip;
+                    if (cursor_color_num != 40) return skip;
+
+                    const cursor_color_space = MultiCursor.ColorSpace.parse(cursor_color_param_iter.rest()) catch return skip;
+
+                    return .event(sequence.len, Event{ .multi_cursor_color = MultiCursor.ColorReport{
+                        .text_under_cursor = text_under_cursor_color_space,
+                        .cursor = cursor_color_space,
+                    } });
+                },
+                else => return skip,
+            }
+        },
+        else => return skip,
     }
 }
 
@@ -645,8 +619,8 @@ inline fn parseParam(comptime T: type, buf: []const u8, default: ?T) ?T {
 }
 
 /// Parse a mouse event
-inline fn parseMouse(input: []const u8, full_input: []const u8) Result {
-    const null_event: Result = .skip(input.len);
+inline fn parseMouse(input: []const u8, full_input: []const u8) ParseResult {
+    const skip: ParseResult = .skip(input.len);
 
     var button_mask: u16 = undefined;
     var px: i16 = undefined;
@@ -659,13 +633,13 @@ inline fn parseMouse(input: []const u8, full_input: []const u8) Result {
         py = full_input[5] - 32;
     } else if (input.len >= 4 and input[2] == '<') {
         xterm = false;
-        const delim1 = std.mem.indexOfScalarPos(u8, input, 3, ';') orelse return null_event;
-        button_mask = parseParam(u16, input[3..delim1], null) orelse return null_event;
-        const delim2 = std.mem.indexOfScalarPos(u8, input, delim1 + 1, ';') orelse return null_event;
-        px = parseParam(i16, input[delim1 + 1 .. delim2], 1) orelse return null_event;
-        py = parseParam(i16, input[delim2 + 1 .. input.len - 1], 1) orelse return null_event;
+        const delim1 = std.mem.indexOfScalarPos(u8, input, 3, ';') orelse return skip;
+        button_mask = parseParam(u16, input[3..delim1], null) orelse return skip;
+        const delim2 = std.mem.indexOfScalarPos(u8, input, delim1 + 1, ';') orelse return skip;
+        px = parseParam(i16, input[delim1 + 1 .. delim2], 1) orelse return skip;
+        py = parseParam(i16, input[delim2 + 1 .. input.len - 1], 1) orelse return skip;
     } else {
-        return null_event;
+        return skip;
     }
 
     if (button_mask & mouse_bits.leave > 0)
@@ -703,16 +677,63 @@ inline fn parseMouse(input: []const u8, full_input: []const u8) Result {
             break :blk .press;
         },
     };
-    return .{ .parse = .{ .event = .{ .mouse = mouse } }, .n = if (xterm) 6 else input.len };
+
+    const n = if (xterm) 6 else input.len;
+    return .event(n, Event{ .mouse = mouse });
 }
+
+/// The return type of our parse method. Contains an Event and the number of
+/// bytes read from the buffer.
+pub const ParseResult = struct {
+    parse: Parse,
+    n: usize,
+
+    pub const none = ParseResult{
+        .parse = .none,
+        .n = 0,
+    };
+
+    pub fn skip(n: usize) ParseResult {
+        return ParseResult{
+            .parse = .skip,
+            .n = n,
+        };
+    }
+
+    pub fn event(n: usize, e: Event) ParseResult {
+        return ParseResult{
+            .parse = .{ .event = e },
+            .n = n,
+        };
+    }
+
+    pub const Parse = union(enum) {
+        none,
+        skip,
+        event: Event,
+
+        paste_start,
+        paste_end,
+    };
+};
+
+const mouse_bits = struct {
+    const motion: u8 = 0b00100000;
+    const buttons: u8 = 0b11000011;
+    const shift: u8 = 0b00000100;
+    const alt: u8 = 0b00001000;
+    const ctrl: u8 = 0b00010000;
+    const leave: u16 = 0b100000000;
+};
 
 const testing = std.testing;
 
-test "parse: single xterm keypress" {
-    const alloc = testing.allocator_instance.allocator();
-    const input = "a";
+test "parse(NORMAL): single keypress" {
+    const alloc = testing.allocator;
     var parser: Parser = .init(alloc);
     defer parser.deinit();
+
+    const input = "a";
     const result = try parser.parse(input);
     const expected_key: Key = .{
         .codepoint = 'a',
@@ -724,11 +745,12 @@ test "parse: single xterm keypress" {
     try testing.expectEqual(expected_event, result.parse.event);
 }
 
-test "parse: single xterm keypress backspace" {
-    const alloc = testing.allocator_instance.allocator();
-    const input = "\x08";
+test "parse(NORMAL): single keypress backspace" {
+    const alloc = testing.allocator;
     var parser: Parser = .init(alloc);
     defer parser.deinit();
+
+    const input = "\x08";
     const result = try parser.parse(input);
     const expected_key: Key = .{
         .codepoint = Key.backspace,
@@ -739,8 +761,8 @@ test "parse: single xterm keypress backspace" {
     try testing.expectEqual(expected_event, result.parse.event);
 }
 
-test "parse: single xterm keypress with more buffer" {
-    const alloc = testing.allocator_instance.allocator();
+test "parse(NORMAL): single keypress with more buffer" {
+    const alloc = testing.allocator;
     const input = "ab";
     var parser: Parser = .init(alloc);
     defer parser.deinit();
@@ -756,11 +778,12 @@ test "parse: single xterm keypress with more buffer" {
     try testing.expectEqualDeep(expected_event, result.parse.event);
 }
 
-test "parse: xterm escape keypress" {
-    const alloc = testing.allocator_instance.allocator();
-    const input = "\x1b";
+test "parse(NORMAL): escape keypress" {
+    const alloc = testing.allocator;
     var parser: Parser = .init(alloc);
     defer parser.deinit();
+
+    const input = ctlseqs.ESC;
     const result = try parser.parse(input);
     const expected_key: Key = .{ .codepoint = Key.escape };
     const expected_event: Event = .{ .key_press = expected_key };
@@ -769,11 +792,12 @@ test "parse: xterm escape keypress" {
     try testing.expectEqual(expected_event, result.parse.event);
 }
 
-test "parse: xterm ctrl+a" {
-    const alloc = testing.allocator_instance.allocator();
-    const input = "\x01";
+test "parse(NORMAL): ctrl+a" {
+    const alloc = testing.allocator;
     var parser: Parser = .init(alloc);
     defer parser.deinit();
+
+    const input = "\x01";
     const result = try parser.parse(input);
     const expected_key: Key = .{ .codepoint = 'a', .mods = .{ .ctrl = true } };
     const expected_event: Event = .{ .key_press = expected_key };
@@ -782,11 +806,12 @@ test "parse: xterm ctrl+a" {
     try testing.expectEqual(expected_event, result.parse.event);
 }
 
-test "parse: xterm alt+a" {
-    const alloc = testing.allocator_instance.allocator();
-    const input = "\x1ba";
+test "parse(NORMAL): alt+a" {
+    const alloc = testing.allocator;
     var parser: Parser = .init(alloc);
     defer parser.deinit();
+
+    const input = ctlseqs.ESC ++ "a";
     const result = try parser.parse(input);
     const expected_key: Key = .{ .codepoint = 'a', .mods = .{ .alt = true } };
     const expected_event: Event = .{ .key_press = expected_key };
@@ -795,196 +820,12 @@ test "parse: xterm alt+a" {
     try testing.expectEqual(expected_event, result.parse.event);
 }
 
-test "parse: xterm key up" {
-    const alloc = testing.allocator_instance.allocator();
-    {
-        // normal version
-        const input = "\x1b[A";
-        var parser: Parser = .init(alloc);
-        defer parser.deinit();
-        const result = try parser.parse(input);
-        const expected_key: Key = .{ .codepoint = Key.up };
-        const expected_event: Event = .{ .key_press = expected_key };
-
-        try testing.expectEqual(3, result.n);
-        try testing.expectEqual(expected_event, result.parse.event);
-    }
-
-    {
-        // application keys version
-        const input = "\x1bOA";
-        var parser: Parser = .init(alloc);
-        defer parser.deinit();
-        const result = try parser.parse(input);
-        const expected_key: Key = .{ .codepoint = Key.up };
-        const expected_event: Event = .{ .key_press = expected_key };
-
-        try testing.expectEqual(3, result.n);
-        try testing.expectEqual(expected_event, result.parse.event);
-    }
-}
-
-test "parse: xterm shift+up" {
-    const alloc = testing.allocator_instance.allocator();
-    const input = "\x1b[1;2A";
+test "parse(NORMAL): single codepoint" {
+    const alloc = testing.allocator;
     var parser: Parser = .init(alloc);
     defer parser.deinit();
-    const result = try parser.parse(input);
-    const expected_key: Key = .{ .codepoint = Key.up, .mods = .{ .shift = true } };
-    const expected_event: Event = .{ .key_press = expected_key };
 
-    try testing.expectEqual(6, result.n);
-    try testing.expectEqual(expected_event, result.parse.event);
-}
-
-test "parse: xterm insert" {
-    const alloc = testing.allocator_instance.allocator();
-    const input = "\x1b[2~";
-    var parser: Parser = .init(alloc);
-    defer parser.deinit();
-    const result = try parser.parse(input);
-    const expected_key: Key = .{ .codepoint = Key.insert, .mods = .{} };
-    const expected_event: Event = .{ .key_press = expected_key };
-
-    try testing.expectEqual(input.len, result.n);
-    try testing.expectEqual(expected_event, result.parse.event);
-}
-
-test "parse: paste_start" {
-    const alloc = testing.allocator_instance.allocator();
-    const input = "\x1b[200~";
-    var parser: Parser = .init(alloc);
-    defer parser.deinit();
-    const result = try parser.parse(input);
-    const expected: Result.Parse = .paste_start;
-
-    try testing.expectEqual(6, result.n);
-    try testing.expectEqual(expected, result.parse);
-}
-
-test "parse: paste_end" {
-    const alloc = testing.allocator_instance.allocator();
-    const input = "\x1b[201~";
-    var parser: Parser = .init(alloc);
-    defer parser.deinit();
-    const result = try parser.parse(input);
-    const expected: Result.Parse = .paste_end;
-
-    try testing.expectEqual(6, result.n);
-    try testing.expectEqual(expected, result.parse);
-}
-
-test "parse: osc52 paste" {
-    const alloc = testing.allocator_instance.allocator();
-    const input = "\x1b]52;c;b3NjNTIgcGFzdGU=\x1b\\";
-    const expected_text = "osc52 paste";
-    var parser: Parser = .init(alloc);
-    defer parser.deinit();
-    const result = try parser.parse(input);
-
-    try testing.expectEqual(25, result.n);
-    switch (result.parse.event) {
-        .paste => |text| {
-            try testing.expectEqualStrings(expected_text, text);
-        },
-        else => try testing.expect(false),
-    }
-}
-
-test "parse: focus_in" {
-    const alloc = testing.allocator_instance.allocator();
-    const input = "\x1b[I";
-    var parser: Parser = .init(alloc);
-    defer parser.deinit();
-    const result = try parser.parse(input);
-    const expected_event: Event = .focus_in;
-
-    try testing.expectEqual(3, result.n);
-    try testing.expectEqual(expected_event, result.parse.event);
-}
-
-test "parse: focus_out" {
-    const alloc = testing.allocator_instance.allocator();
-    const input = "\x1b[O";
-    var parser: Parser = .init(alloc);
-    defer parser.deinit();
-    const result = try parser.parse(input);
-    const expected_event: Event = .focus_out;
-
-    try testing.expectEqual(3, result.n);
-    try testing.expectEqual(expected_event, result.parse.event);
-}
-
-test "parse: kitty: shift+a without text reporting" {
-    const alloc = testing.allocator_instance.allocator();
-    const input = "\x1b[97:65;2u";
-    var parser: Parser = .init(alloc);
-    defer parser.deinit();
-    const result = try parser.parse(input);
-    const expected_key: Key = .{
-        .codepoint = 'a',
-        .shifted_codepoint = 'A',
-        .mods = .{ .shift = true },
-        .text = "A",
-    };
-    const expected_event: Event = .{ .key_press = expected_key };
-
-    try testing.expectEqual(10, result.n);
-    try testing.expectEqualDeep(expected_event, result.parse.event);
-}
-
-test "parse: kitty: alt+shift+a without text reporting" {
-    const alloc = testing.allocator_instance.allocator();
-    const input = "\x1b[97:65;4u";
-    var parser: Parser = .init(alloc);
-    defer parser.deinit();
-    const result = try parser.parse(input);
-    const expected_key: Key = .{
-        .codepoint = 'a',
-        .shifted_codepoint = 'A',
-        .mods = .{ .shift = true, .alt = true },
-    };
-    const expected_event: Event = .{ .key_press = expected_key };
-
-    try testing.expectEqual(10, result.n);
-    try testing.expectEqual(expected_event, result.parse.event);
-}
-
-test "parse: kitty: a without text reporting" {
-    const alloc = testing.allocator_instance.allocator();
-    const input = "\x1b[97u";
-    var parser: Parser = .init(alloc);
-    defer parser.deinit();
-    const result = try parser.parse(input);
-    const expected_key: Key = .{
-        .codepoint = 'a',
-    };
-    const expected_event: Event = .{ .key_press = expected_key };
-
-    try testing.expectEqual(5, result.n);
-    try testing.expectEqual(expected_event, result.parse.event);
-}
-
-test "parse: kitty: release event" {
-    const alloc = testing.allocator_instance.allocator();
-    const input = "\x1b[97;1:3u";
-    var parser: Parser = .init(alloc);
-    defer parser.deinit();
-    const result = try parser.parse(input);
-    const expected_key: Key = .{
-        .codepoint = 'a',
-    };
-    const expected_event: Event = .{ .key_release = expected_key };
-
-    try testing.expectEqual(9, result.n);
-    try testing.expectEqual(expected_event, result.parse.event);
-}
-
-test "parse: single codepoint" {
-    const alloc = testing.allocator_instance.allocator();
     const input = "🙂";
-    var parser: Parser = .init(alloc);
-    defer parser.deinit();
     const result = try parser.parse(input);
     const expected_key: Key = .{
         .codepoint = 0x1F642,
@@ -996,11 +837,12 @@ test "parse: single codepoint" {
     try testing.expectEqual(expected_event, result.parse.event);
 }
 
-test "parse: single codepoint with more in buffer" {
-    const alloc = testing.allocator_instance.allocator();
-    const input = "🙂a";
+test "parse(NORMAL): single codepoint with more in buffer" {
+    const alloc = testing.allocator;
     var parser: Parser = .init(alloc);
     defer parser.deinit();
+
+    const input = "🙂a";
     const result = try parser.parse(input);
     const expected_key: Key = .{
         .codepoint = 0x1F642,
@@ -1012,11 +854,12 @@ test "parse: single codepoint with more in buffer" {
     try testing.expectEqualDeep(expected_event, result.parse.event);
 }
 
-test "parse: multiple codepoint grapheme" {
-    const alloc = testing.allocator_instance.allocator();
-    const input = "👩‍🚀";
+test "parse(NORMAL): multiple codepoint grapheme" {
+    const alloc = testing.allocator;
     var parser: Parser = .init(alloc);
     defer parser.deinit();
+
+    const input = "👩‍🚀";
     const result = try parser.parse(input);
     const expected_key: Key = .{
         .codepoint = Key.multicodepoint,
@@ -1028,11 +871,12 @@ test "parse: multiple codepoint grapheme" {
     try testing.expectEqual(expected_event, result.parse.event);
 }
 
-test "parse: multiple codepoint grapheme with more after" {
-    const alloc = testing.allocator_instance.allocator();
-    const input = "👩‍🚀abc";
+test "parse(NORMAL): multiple codepoint grapheme with more after" {
+    const alloc = testing.allocator;
     var parser: Parser = .init(alloc);
     defer parser.deinit();
+
+    const input = "👩‍🚀abc";
     const result = try parser.parse(input);
     const expected_key: Key = .{
         .codepoint = Key.multicodepoint,
@@ -1045,11 +889,12 @@ test "parse: multiple codepoint grapheme with more after" {
     try testing.expectEqual(expected_key.codepoint, actual.codepoint);
 }
 
-test "parse: flag emoji" {
-    const alloc = testing.allocator_instance.allocator();
-    const input = "🇺🇸";
+test "parse(NORMAL): flag emoji" {
+    const alloc = testing.allocator;
     var parser: Parser = .init(alloc);
     defer parser.deinit();
+
+    const input = "🇺🇸";
     const result = try parser.parse(input);
     const expected_key: Key = .{
         .codepoint = Key.multicodepoint,
@@ -1061,10 +906,11 @@ test "parse: flag emoji" {
     try testing.expectEqual(expected_event, result.parse.event);
 }
 
-test "parse: combining mark" {
-    const alloc = testing.allocator_instance.allocator();
+test "parse(NORMAL): combining mark" {
+    const alloc = testing.allocator;
     var parser: Parser = .init(alloc);
     defer parser.deinit();
+
     // a with combining acute accent (NFD form)
     const input = "a\u{0301}";
     const result = try parser.parse(input);
@@ -1078,8 +924,8 @@ test "parse: combining mark" {
     try testing.expectEqual(expected_event, result.parse.event);
 }
 
-test "parse: skin tone emoji" {
-    const alloc = testing.allocator_instance.allocator();
+test "parse(NORMAL): skin tone emoji" {
+    const alloc = testing.allocator;
     var parser: Parser = .init(alloc);
     defer parser.deinit();
 
@@ -1095,12 +941,13 @@ test "parse: skin tone emoji" {
     try testing.expectEqual(expected_event, result.parse.event);
 }
 
-test "parse: text variation selector" {
-    const alloc = testing.allocator_instance.allocator();
+test "parse(NORMAL): text variation selector" {
+    const alloc = testing.allocator;
+    var parser: Parser = .init(alloc);
+    defer parser.deinit();
+
     // Heavy black heart with text variation selector
     const input = "❤︎";
-    var parser: Parser = .init(alloc);
-    defer parser.deinit();
     const result = try parser.parse(input);
     const expected_key: Key = .{
         .codepoint = Key.multicodepoint,
@@ -1112,11 +959,12 @@ test "parse: text variation selector" {
     try testing.expectEqual(expected_event, result.parse.event);
 }
 
-test "parse: keycap sequence" {
-    const alloc = testing.allocator_instance.allocator();
+test "parse(NORMAL): keycap sequence" {
+    const alloc = testing.allocator;
+    var parser: Parser = .init(alloc);
+    defer parser.deinit();
+
     const input = "1️⃣";
-    var parser: Parser = .init(alloc);
-    defer parser.deinit();
     const result = try parser.parse(input);
     const expected_key: Key = .{
         .codepoint = Key.multicodepoint,
@@ -1128,51 +976,140 @@ test "parse: keycap sequence" {
     try testing.expectEqual(expected_event, result.parse.event);
 }
 
-test "parse(csi): dsr" {
-    const alloc = testing.allocator_instance.allocator();
+test "parse(SS3): key up" {
+    const alloc = testing.allocator;
     var parser: Parser = .init(alloc);
     defer parser.deinit();
 
-    {
-        const input = "\x1b[?997;1n";
-        const result = try parser.parseCsi(input);
-        const expected: Result = .{
-            .parse = .{ .event = .{ .color_scheme = .dark } },
-            .n = input.len,
-        };
+    const input = ctlseqs.SS3 ++ "A";
+    const result = try parser.parse(input);
+    const expected_key: Key = .{ .codepoint = Key.up };
+    const expected_event: Event = .{ .key_press = expected_key };
 
-        try testing.expectEqual(expected.n, result.n);
-        try testing.expectEqual(expected.parse, result.parse);
-    }
-    {
-        const input = "\x1b[?997;2n";
-        const result = try parser.parseCsi(input);
-        const expected: Result = .{
-            .parse = .{ .event = .{ .color_scheme = .light } },
-            .n = input.len,
-        };
-
-        try testing.expectEqual(expected.n, result.n);
-        try testing.expectEqual(expected.parse, result.parse);
-    }
-    {
-        const input = "\x1b[0n";
-        const result = try parser.parseCsi(input);
-        const expected: Result = .skip(input.len);
-
-        try testing.expectEqual(expected.n, result.n);
-        try testing.expectEqual(expected.parse, result.parse);
-    }
+    try testing.expectEqual(3, result.n);
+    try testing.expectEqual(expected_event, result.parse.event);
 }
 
-test "parse(csi): mouse" {
-    const alloc = testing.allocator_instance.allocator();
+test "parse(CSI): key up" {
+    const alloc = testing.allocator;
     var parser: Parser = .init(alloc);
     defer parser.deinit();
 
-    const input = "\x1b[<35;1;1m";
-    const result = try parser.parseCsi(input);
-    const expected: Result = .{
+    const input = ctlseqs.CSI ++ "A";
+    const result = try parser.parse(input);
+    const expected_key: Key = .{ .codepoint = Key.up };
+    const expected_event: Event = .{ .key_press = expected_key };
+
+    try testing.expectEqual(3, result.n);
+    try testing.expectEqual(expected_event, result.parse.event);
+}
+
+test "parse(CSI): shift+up" {
+    const alloc = testing.allocator;
+    var parser: Parser = .init(alloc);
+    defer parser.deinit();
+
+    const input = ctlseqs.CSI ++ "1;2A";
+    const result = try parser.parse(input);
+    const expected_key: Key = .{ .codepoint = Key.up, .mods = .{ .shift = true } };
+    const expected_event: Event = .{ .key_press = expected_key };
+
+    try testing.expectEqual(6, result.n);
+    try testing.expectEqual(expected_event, result.parse.event);
+}
+
+test "parse(CSI): insert" {
+    const alloc = testing.allocator;
+    const input = ctlseqs.CSI ++ "2~";
+    var parser: Parser = .init(alloc);
+    defer parser.deinit();
+    const result = try parser.parse(input);
+    const expected_key: Key = .{ .codepoint = Key.insert, .mods = .{} };
+    const expected_event: Event = .{ .key_press = expected_key };
+
+    try testing.expectEqual(input.len, result.n);
+    try testing.expectEqual(expected_event, result.parse.event);
+}
+
+test "parse(CSI): disambiguate shift + space" {
+    const alloc = testing.allocator;
+    var parser: Parser = .init(alloc);
+    defer parser.deinit();
+
+    const input = ctlseqs.CSI ++ "32;2u";
+    const result = try parser.parse(input);
+    const expected_key: Key = .{
+        .codepoint = ' ',
+        .shifted_codepoint = ' ',
+        .mods = .{ .shift = true },
+        .text = " ",
+    };
+    const expected_event: Event = .{ .key_press = expected_key };
+
+    try testing.expectEqual(7, result.n);
+    try testing.expectEqualDeep(expected_event, result.parse.event);
+}
+
+test "parse(CSI): paste_start" {
+    const alloc = testing.allocator;
+    var parser: Parser = .init(alloc);
+    defer parser.deinit();
+
+    const input = ctlseqs.CSI ++ "200~";
+    const result = try parser.parse(input);
+    const expected: ParseResult.Parse = .paste_start;
+
+    try testing.expectEqual(6, result.n);
+    try testing.expectEqual(expected, result.parse);
+}
+
+test "parse(CSI): paste_end" {
+    const alloc = testing.allocator;
+    var parser: Parser = .init(alloc);
+    defer parser.deinit();
+
+    const input = ctlseqs.CSI ++ "201~";
+    const result = try parser.parse(input);
+    const expected: ParseResult.Parse = .paste_end;
+
+    try testing.expectEqual(6, result.n);
+    try testing.expectEqual(expected, result.parse);
+}
+
+test "parse(CSI): focus_in" {
+    const alloc = testing.allocator;
+    var parser: Parser = .init(alloc);
+    defer parser.deinit();
+
+    const input = ctlseqs.CSI ++ "I";
+    const result = try parser.parse(input);
+    const expected_event: Event = .focus_in;
+
+    try testing.expectEqual(3, result.n);
+    try testing.expectEqual(expected_event, result.parse.event);
+}
+
+test "parse(CSI): focus_out" {
+    const alloc = testing.allocator;
+    var parser: Parser = .init(alloc);
+    defer parser.deinit();
+
+    const input = ctlseqs.CSI ++ "O";
+    const result = try parser.parse(input);
+    const expected_event: Event = .focus_out;
+
+    try testing.expectEqual(3, result.n);
+    try testing.expectEqual(expected_event, result.parse.event);
+}
+
+test "parse(CSI): mouse" {
+    const alloc = testing.allocator;
+    var parser: Parser = .init(alloc);
+    defer parser.deinit();
+
+    const input = ctlseqs.CSI ++ "<35;1;1m";
+    const result = try parser.parse(input);
+    const expected: ParseResult = .{
         .parse = .{ .event = .{ .mouse = .{
             .col = 0,
             .row = 0,
@@ -1187,14 +1124,14 @@ test "parse(csi): mouse" {
     try testing.expectEqual(expected.parse, result.parse);
 }
 
-test "parse(csi): mouse (negative)" {
-    const alloc = testing.allocator_instance.allocator();
+test "parse(CSI): mouse (negative)" {
+    const alloc = testing.allocator;
     var parser: Parser = .init(alloc);
     defer parser.deinit();
 
-    const input = "\x1b[<35;-50;-100m";
-    const result = try parser.parseCsi(input);
-    const expected: Result = .{
+    const input = ctlseqs.CSI ++ "<35;-50;-100m";
+    const result = try parser.parse(input);
+    const expected: ParseResult = .{
         .parse = .{ .event = .{ .mouse = .{
             .col = -51,
             .row = -101,
@@ -1209,14 +1146,14 @@ test "parse(csi): mouse (negative)" {
     try testing.expectEqual(expected.parse, result.parse);
 }
 
-test "parse(csi): xterm mouse (X10)" {
-    const alloc = testing.allocator_instance.allocator();
+test "parse(CSI): xterm mouse (X10)" {
+    const alloc = testing.allocator;
     var parser: Parser = .init(alloc);
     defer parser.deinit();
 
-    const input = "\x1b[M\x20\x21\x21";
-    const result = try parser.parseCsi(input);
-    const expected: Result = .{
+    const input = ctlseqs.CSI ++ "M\x20\x21\x21";
+    const result = try parser.parse(input);
+    const expected: ParseResult = .{
         .parse = .{ .event = .{ .mouse = .{
             .col = 0,
             .row = 0,
@@ -1231,33 +1168,348 @@ test "parse(csi): xterm mouse (X10)" {
     try testing.expectEqual(expected.parse, result.parse);
 }
 
-test "parse(csi): mouse (URXVT)" {
-    const alloc = testing.allocator_instance.allocator();
+test "parse(CSI): mouse (URXVT)" {
+    const alloc = testing.allocator;
     var parser: Parser = .init(alloc);
     defer parser.deinit();
 
-    const input = "\x1b[35;-50;100m";
-    const result = try parser.parseCsi(input);
-    const expected: Result = .skip(input.len);
-    
+    const input = ctlseqs.CSI ++ "35;-50;100m";
+    const result = try parser.parse(input);
+    const expected: ParseResult = .skip(input.len);
+
     try testing.expectEqual(expected.n, result.n);
     try testing.expectEqual(expected.parse, result.parse);
 }
 
-test "parse: disambiguate shift + space" {
-    const alloc = testing.allocator_instance.allocator();
-    const input = "\x1b[32;2u";
+test "parse(CSI): Color sheme" {
+    const alloc = testing.allocator;
     var parser: Parser = .init(alloc);
     defer parser.deinit();
+
+    {
+        const input = ctlseqs.CSI ++ "?997;1n";
+        const result = try parser.parse(input);
+        const expected: ParseResult = .{
+            .parse = .{ .event = .{ .color_scheme = .dark } },
+            .n = input.len,
+        };
+
+        try testing.expectEqual(expected.n, result.n);
+        try testing.expectEqual(expected.parse, result.parse);
+    }
+
+    {
+        const input = ctlseqs.CSI ++ "?997;2n";
+        const result = try parser.parse(input);
+        const expected: ParseResult = .{
+            .parse = .{ .event = .{ .color_scheme = .light } },
+            .n = input.len,
+        };
+
+        try testing.expectEqual(expected.n, result.n);
+        try testing.expectEqual(expected.parse, result.parse);
+    }
+
+    {
+        const input = ctlseqs.CSI ++ "0n";
+        const result = try parser.parse(input);
+        const expected: ParseResult = .skip(input.len);
+
+        try testing.expectEqual(expected.n, result.n);
+        try testing.expectEqual(expected.parse, result.parse);
+    }
+}
+
+test "parse(CSI): In-Band Window Resize" {
+    const alloc = testing.allocator;
+    var parser: Parser = .init(alloc);
+    defer parser.deinit();
+
+    const input = ctlseqs.CSI ++ "48;80;120;800;1200t";
+    const result = try parser.parse(input);
+    const expected: ParseResult = .{
+        .parse = .{ .event = .{ .winsize = .{ .rows = 80, .cols = 120, .y_pixel = 800, .x_pixel = 1200 } } },
+        .n = input.len,
+    };
+
+    try testing.expectEqual(expected.n, result.n);
+    try testing.expectEqual(expected.parse, result.parse);
+}
+
+test "parse(CSI): kitty: shift+a with text reporting" {
+    const alloc = testing.allocator;
+    var parser: Parser = .init(alloc);
+    defer parser.deinit();
+
+    const input = ctlseqs.CSI ++ "97:65;2;229u";
     const result = try parser.parse(input);
     const expected_key: Key = .{
-        .codepoint = ' ',
-        .shifted_codepoint = ' ',
+        .codepoint = 'a',
+        .shifted_codepoint = 'A',
         .mods = .{ .shift = true },
-        .text = " ",
+        .text = "å",
     };
     const expected_event: Event = .{ .key_press = expected_key };
 
-    try testing.expectEqual(7, result.n);
+    try testing.expectEqual(input.len, result.n);
     try testing.expectEqualDeep(expected_event, result.parse.event);
+}
+
+test "parse(CSI): kitty: shift+a without text reporting" {
+    const alloc = testing.allocator;
+    var parser: Parser = .init(alloc);
+    defer parser.deinit();
+
+    const input = ctlseqs.CSI ++ "97:65;2u";
+    const result = try parser.parse(input);
+    const expected_key: Key = .{
+        .codepoint = 'a',
+        .shifted_codepoint = 'A',
+        .mods = .{ .shift = true },
+        .text = "A",
+    };
+    const expected_event: Event = .{ .key_press = expected_key };
+
+    try testing.expectEqual(10, result.n);
+    try testing.expectEqualDeep(expected_event, result.parse.event);
+}
+
+test "parse(CSI): kitty: alt+shift+a without text reporting" {
+    const alloc = testing.allocator;
+    var parser: Parser = .init(alloc);
+    defer parser.deinit();
+
+    const input = ctlseqs.CSI ++ "97:65;4u";
+    const result = try parser.parse(input);
+    const expected_key: Key = .{
+        .codepoint = 'a',
+        .shifted_codepoint = 'A',
+        .mods = .{ .shift = true, .alt = true },
+    };
+    const expected_event: Event = .{ .key_press = expected_key };
+
+    try testing.expectEqual(10, result.n);
+    try testing.expectEqual(expected_event, result.parse.event);
+}
+
+test "parse(CSI): kitty: a without text reporting" {
+    const alloc = testing.allocator;
+    var parser: Parser = .init(alloc);
+    defer parser.deinit();
+
+    const input = ctlseqs.CSI ++ "97u";
+    const result = try parser.parse(input);
+    const expected_key: Key = .{
+        .codepoint = 'a',
+    };
+    const expected_event: Event = .{ .key_press = expected_key };
+
+    try testing.expectEqual(5, result.n);
+    try testing.expectEqual(expected_event, result.parse.event);
+}
+
+test "parse(CSI): kitty: release event" {
+    const alloc = testing.allocator;
+    var parser: Parser = .init(alloc);
+    defer parser.deinit();
+
+    const input = ctlseqs.CSI ++ "97;1:3u";
+    const result = try parser.parse(input);
+    const expected_key: Key = .{
+        .codepoint = 'a',
+    };
+    const expected_event: Event = .{ .key_release = expected_key };
+
+    try testing.expectEqual(9, result.n);
+    try testing.expectEqual(expected_event, result.parse.event);
+}
+
+test "parse(CSI): kitty multi cursors report" {
+    const alloc = testing.allocator;
+    var parser: Parser = .init(alloc);
+    defer parser.deinit();
+
+    const input = ctlseqs.CSI ++ ">100;1:2:4:5;2:4:1:4:2:8;3:2:6:5;29:0" ++ MultiCursor.TRAILER;
+    const result = try parser.parse(input);
+    const expected_color_reports: []const MultiCursor.Report = &.{
+        MultiCursor.Report{
+            .shape = .block,
+            .pos = .{ .xy = .{
+                .x = 4,
+                .y = 5,
+            } },
+        },
+        MultiCursor.Report{
+            .shape = .beam,
+            .pos = .{ .area = .{
+                .top_left = .{
+                    .x = 1,
+                    .y = 4,
+                },
+                .bottom_right = .{
+                    .x = 2,
+                    .y = 8,
+                },
+            } },
+        },
+        MultiCursor.Report{
+            .shape = .underline,
+            .pos = .{ .xy = .{
+                .x = 6,
+                .y = 5,
+            } },
+        },
+        MultiCursor.Report{
+            .shape = .follow_main,
+            .pos = .follow_main,
+        },
+    };
+
+    try testing.expectEqual(input.len, result.n);
+    try testing.expect(result.parse.event == .multi_cursors);
+
+    const actual_color_reports = result.parse.event.multi_cursors;
+    try testing.expectEqual(expected_color_reports.len, actual_color_reports.len);
+    for (expected_color_reports, 0..) |expected_color_report, i| {
+        try testing.expectEqual(expected_color_report, actual_color_reports[i]);
+    }
+}
+
+test "parse(CSI): kitty multi cursor color report" {
+    const alloc = testing.allocator;
+    var parser: Parser = .init(alloc);
+    defer parser.deinit();
+
+    {
+        const input = MultiCursor.INTRODUCER ++ "101;30:0;40:1" ++ MultiCursor.TRAILER;
+        const result = try parser.parse(input);
+        const expected = MultiCursor.ColorReport{
+            .text_under_cursor = .follow_main,
+            .cursor = .special,
+        };
+
+        try testing.expectEqual(input.len, result.n);
+        try testing.expectEqual(expected, result.parse.event.multi_cursor_color);
+    }
+    {
+        const input = MultiCursor.INTRODUCER ++ "101;30:2:255:255:255;40:5:255" ++ MultiCursor.TRAILER;
+        const result = try parser.parse(input);
+        const expected = MultiCursor.ColorReport{
+            .text_under_cursor = .{ .rgb = .{ 255, 255, 255 } },
+            .cursor = .{ .index = 255 },
+        };
+        
+        try testing.expectEqual(input.len, result.n);
+        try testing.expectEqual(expected, result.parse.event.multi_cursor_color);
+    }
+}
+
+test "parse(OSC 4): Color reports" {
+    const alloc = testing.allocator;
+    var parser: Parser = .init(alloc);
+    defer parser.deinit();
+
+    {
+        const input = ctlseqs.OSC ++ "4;19;rgb:AAAA/BBBB/CCCC" ++ ctlseqs.ST;
+        const result = try parser.parse(input);
+
+        try testing.expectEqual(input.len, result.n);
+        try testing.expect(result.parse.event == .color_report);
+        try testing.expect(result.parse.event.color_report.kind.index == 19);
+    }
+    {
+        const input = ctlseqs.OSC ++ "4;19;rgb:AAAA/BBBB/CCCC" ++ ctlseqs.BEL;
+        const result = try parser.parse(input);
+
+        try testing.expectEqual(input.len, result.n);
+        try testing.expect(result.parse.event == .color_report);
+        try testing.expect(result.parse.event.color_report.kind.index == 19);
+    }
+}
+
+test "parse(OSC 10): Color reports" {
+    const alloc = testing.allocator;
+    var parser: Parser = .init(alloc);
+    defer parser.deinit();
+
+    {
+        const input = ctlseqs.OSC ++ "10;rgb:AAAA/BBBB/CCCC" ++ ctlseqs.ST;
+        const result = try parser.parse(input);
+
+        try testing.expectEqual(input.len, result.n);
+        try testing.expect(result.parse.event == .color_report);
+        try testing.expect(result.parse.event.color_report.kind == .fg);
+    }
+    {
+        const input = ctlseqs.OSC ++ "10;rgb:AAAA/BBBB/CCCC" ++ ctlseqs.BEL;
+        const result = try parser.parse(input);
+
+        try testing.expectEqual(input.len, result.n);
+        try testing.expect(result.parse.event == .color_report);
+        try testing.expect(result.parse.event.color_report.kind == .fg);
+    }
+}
+
+test "parse(OSC 11): Color reports" {
+    const alloc = testing.allocator;
+    var parser: Parser = .init(alloc);
+    defer parser.deinit();
+
+    {
+        const input = ctlseqs.OSC ++ "11;rgb:AAAA/BBBB/CCCC" ++ ctlseqs.ST;
+        const result = try parser.parse(input);
+
+        try testing.expectEqual(input.len, result.n);
+        try testing.expect(result.parse.event == .color_report);
+        try testing.expect(result.parse.event.color_report.kind == .bg);
+    }
+    {
+        const input = ctlseqs.OSC ++ "11;rgb:AAAA/BBBB/CCCC" ++ ctlseqs.BEL;
+        const result = try parser.parse(input);
+
+        try testing.expectEqual(input.len, result.n);
+        try testing.expect(result.parse.event == .color_report);
+        try testing.expect(result.parse.event.color_report.kind == .bg);
+    }
+}
+
+test "parse(OSC 12): Color reports" {
+    const alloc = testing.allocator;
+    var parser: Parser = .init(alloc);
+    defer parser.deinit();
+
+    {
+        const input = ctlseqs.OSC ++ "12;rgb:AAAA/BBBB/CCCC" ++ ctlseqs.ST;
+        const result = try parser.parse(input);
+
+        try testing.expectEqual(input.len, result.n);
+        try testing.expect(result.parse.event == .color_report);
+        try testing.expect(result.parse.event.color_report.kind == .cursor);
+    }
+    {
+        const input = ctlseqs.OSC ++ "12;rgb:AAAA/BBBB/CCCC" ++ ctlseqs.BEL;
+        const result = try parser.parse(input);
+
+        try testing.expectEqual(input.len, result.n);
+        try testing.expect(result.parse.event == .color_report);
+        try testing.expect(result.parse.event.color_report.kind == .cursor);
+    }
+}
+
+test "parse(OSC 52): paste" {
+    const alloc = testing.allocator;
+    var parser: Parser = .init(alloc);
+    defer parser.deinit();
+
+    const input = ctlseqs.OSC ++ "52;c;b3NjNTIgcGFzdGU=" ++ ctlseqs.ST;
+    const result = try parser.parse(input);
+    const expected_text = "osc52 paste";
+
+    try testing.expectEqual(25, result.n);
+    switch (result.parse.event) {
+        .paste => |text| {
+            try testing.expectEqualStrings(expected_text, text);
+        },
+        else => try testing.expect(false),
+    }
 }

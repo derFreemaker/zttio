@@ -5,7 +5,7 @@ const zigwin = @import("zigwin");
 const winconsole = zigwin.system.console;
 
 const ctlseqs = @import("ctlseqs.zig");
-const MultiCursor = ctlseqs.Terminal.MultiCursor;
+const KittyMultiCursorFlags = ctlseqs.Terminal.KittyMultiCursorFlags;
 const KittyKeyboardFlags = ctlseqs.Terminal.KittyKeyboardFlags;
 const gwidth = @import("gwidth.zig");
 const Key = @import("key.zig");
@@ -33,7 +33,7 @@ color_scheme_updates: bool = false,
 in_band_winsize: bool = false,
 explicit_width: bool = false,
 scaled_text: bool = false,
-multi_cursor: ?MultiCursor = null,
+multi_cursor: ?KittyMultiCursorFlags = null,
 kitty_keyboard: ?KittyKeyboardFlags = null,
 kitty_graphics: bool = false,
 rgb: bool = false,
@@ -353,7 +353,7 @@ inline fn parseCsi(input: []const u8, caps: *TerminalCapabilities) ParseResult {
             const second_final = sequence[sequence.len - 2];
             if (second_final != ' ') return consume;
 
-            var supported_multi_cursor: MultiCursor = .{};
+            var supported_multi_cursor: KittyMultiCursorFlags = .{};
             var field_iter = std.mem.splitScalar(u8, sequence[3 .. sequence.len - 2], ';');
             while (field_iter.next()) |field| {
                 const cursor_shape = std.fmt.parseInt(u8, field, 10) catch continue;
@@ -602,7 +602,7 @@ test "parse(CSI): kitty multi cursor" {
         const expected: ParseResult = .consume(input.len);
 
         try testing.expectEqual(expected, result);
-        try testing.expectEqual(MultiCursor{
+        try testing.expectEqual(KittyMultiCursorFlags{
             .block = true,
             .beam = true,
             .underline = true,
@@ -620,7 +620,7 @@ test "parse(CSI): kitty multi cursor" {
         const expected: ParseResult = .consume(input.len);
 
         try testing.expectEqual(expected, result);
-        try testing.expectEqual(MultiCursor{}, caps.multi_cursor);
+        try testing.expectEqual(KittyMultiCursorFlags{}, caps.multi_cursor);
     }
 }
 

@@ -4,6 +4,7 @@ const Key = @import("key.zig");
 const Mouse = @import("mouse.zig");
 const Color = @import("color.zig").Color;
 const Winsize = @import("winsize.zig");
+const MultiCursor = @import("multi_cursor.zig");
 
 pub const Event = union(enum) {
     key_press: Key,
@@ -15,11 +16,15 @@ pub const Event = union(enum) {
     focus_in,
     focus_out,
 
+    winsize: Winsize,
+
     paste: []const u8,
+
     color_report: Color.Report,
     color_scheme: Color.Scheme,
 
-    winsize: Winsize,
+    multi_cursors: []const MultiCursor.Report,
+    multi_cursor_color: MultiCursor.ColorReport,
 
     pub fn deinit(event: *const Event, allocator: std.mem.Allocator) void {
         switch (event.*) {

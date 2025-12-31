@@ -97,7 +97,7 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_common_tests.step);
     test_step.dependOn(&run_tty_tests.step);
-
+    
     if (build_examples) {
         b.installArtifact(b.addExecutable(.{
             .name = "simple_example",

@@ -20,8 +20,8 @@ from [libvaxis](https://github.com/rockorager/libvaxis/tree/11f53c701ae6b5633582
 - [Kitty Keyboard Protocol](https://sw.kovidgoyal.net/kitty/keyboard-protocol/)
 - [Fancy underlines](https://sw.kovidgoyal.net/kitty/underlines/) (undercurl, etc)
 - Mouse Shapes (OSC 22)
+- Progress (OSC 9;4)
 - System Clipboard (OSC 52)
-- System Progress (OSC 9;4)
 - System Notifications (OSC 9; OSC 777)
 - [Unicode Core](https://github.com/contour-terminal/terminal-unicode-core) (Mode 2027)
 - Color Mode Updates (Mode 2031)
@@ -29,6 +29,7 @@ from [libvaxis](https://github.com/rockorager/libvaxis/tree/11f53c701ae6b5633582
 - Synchronized Output (Mode 2026)
 - [Scaled Text](https://sw.kovidgoyal.net/kitty/text-sizing-protocol) (OSC 66)
 - [Explicit Width](https://sw.kovidgoyal.net/kitty/text-sizing-protocol) (OSC 66)
+- [Kitty Multi Cursor](https://sw.kovidgoyal.net/kitty/multiple-cursors-protocol)
 
 [//]: # (- Images &#40;kitty, sixel, ...&#41;)
 

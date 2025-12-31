@@ -17,3 +17,4 @@ pub const Event = @import("event.zig").Event;
 pub const Key = @import("key.zig");
 pub const Mouse = @import("mouse.zig");
 pub const Winsize = @import("winsize.zig");
+pub const MultiCursor = @import("multi_cursor.zig");
