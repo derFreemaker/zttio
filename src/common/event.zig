@@ -24,7 +24,7 @@ pub const Event = union(enum) {
     color_scheme: Color.Scheme,
 
     multi_cursors: []const MultiCursor.Report,
-    multi_cursor_color: MultiCursor.ColorReport,
+    multi_cursor_color: MultiCursor.Color,
 
     pub fn deinit(event: *const Event, allocator: std.mem.Allocator) void {
         switch (event.*) {

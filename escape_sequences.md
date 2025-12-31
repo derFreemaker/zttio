@@ -83,9 +83,10 @@ _completely ignored_
   - ``?...u`` -> capability response ignored 
   - ``...u`` -> key event
 
-### [Kitty Multi Cursor]()
-- ``... q``
-  - ``> ``
+### [Kitty Multi Cursor](https://sw.kovidgoyal.net/kitty/multiple-cursors-protocol)
+- ``>... q``
+  - ``>100... q`` -> ``multi cursors report``
+  - ``>101... q`` -> ``multi cursor color report``
 
 ## OSC
 **Introducer:** ``ESC ]``

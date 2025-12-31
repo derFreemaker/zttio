@@ -386,6 +386,26 @@ pub fn endExplicitWidthText(self: *Tty) error{WriteFailed}!void {
     return self.stdout.writeAll(ctlseqs.Text.end_scaled_or_explicit_width);
 }
 
+pub fn addCursor(self: *Tty, shape: common.MultiCursor.Shape, positions: []const common.MultiCursor.Position) std.Io.Writer.Error!void {
+    return common.MultiCursor.add(self.stdout, shape, positions);
+}
+
+pub fn removeCursor(self: *Tty, positions: []const common.MultiCursor.Position) std.Io.Writer.Error!void {
+    return common.MultiCursor.remove(self.stdout, positions);
+}
+
+pub fn clearCursor(self: *Tty) std.Io.Writer.Error!void {
+    return self.stdout.writeAll(common.MultiCursor.reset);
+}
+
+pub fn setMultiCursorsColor(self: *Tty, color: common.MultiCursor.ColorSpace) std.Io.Writer.Error!void {
+    return common.MultiCursor.setCursorColor(self.stdout, color);
+}
+
+pub fn setTextUnderMultiCursorsColor(self: *Tty, color: common.MultiCursor.ColorSpace) std.Io.Writer.Error!void {
+    return common.MultiCursor.setTextUnderCursorColor(self.stdout, color);
+}
+
 pub const Options = struct {
     kitty_keyboard_flags: ctlseqs.Terminal.KittyKeyboardFlags = .default,
 };

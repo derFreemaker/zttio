@@ -5,12 +5,56 @@ const ctlseqs = @import("ctlseqs.zig");
 pub const INTRODUCER = ctlseqs.CSI ++ ">";
 pub const TRAILER = " q";
 
+pub const reset = INTRODUCER ++ "0;4" ++ TRAILER;
+
+pub fn add(writer: *std.Io.Writer, shape: Shape, positions: []const Position) std.Io.Writer.Error!void {
+    try writer.writeAll(INTRODUCER);
+
+    try writer.print("{d}", .{@intFromEnum(shape)});
+
+    for (positions) |pos| {
+        try writer.writeByte(';');
+        try pos.print(writer);
+    }
+
+    try writer.writeAll(TRAILER);
+}
+
+pub fn remove(writer: *std.Io.Writer, positions: []const Position) std.Io.Writer.Error!void {
+    try writer.writeAll(INTRODUCER);
+
+    try writer.writeByte('0');
+
+    for (positions) |pos| {
+        try writer.writeByte(';');
+        try pos.print(writer);
+    }
+
+    try writer.writeAll(TRAILER);
+}
+
+pub fn setTextUnderCursorColor(writer: *std.Io.Writer, color_space: ColorSpace) std.Io.Writer.Error!void {
+    try writer.writeAll(INTRODUCER ++ "30");
+
+    try color_space.print(writer);
+
+    try writer.writeAll(TRAILER);
+}
+
+pub fn setCursorColor(writer: *std.Io.Writer, color_space: ColorSpace) std.Io.Writer.Error!void {
+    try writer.writeAll(INTRODUCER ++ "40");
+
+    try color_space.print(writer);
+
+    try writer.writeAll(TRAILER);
+}
+
 pub const Report = struct {
     shape: Shape,
     pos: Position,
 };
 
-pub const ColorReport = struct {
+pub const Color = struct {
     text_under_cursor: ColorSpace,
     cursor: ColorSpace,
 };
@@ -20,6 +64,20 @@ pub const ColorSpace = union(Enum) {
     special,
     rgb: [3]u8,
     index: u8,
+
+    pub fn print(self: ColorSpace, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+        try writer.print("{d}", .{@intFromEnum(self)});
+
+        switch (self) {
+            .rgb => |rgb| {
+                try writer.print(":{d}:{d}:{d}", .{ rgb[0], rgb[1], rgb[2] });
+            },
+            .index => |index| {
+                try writer.print(":{d}", .{index});
+            },
+            else => {},
+        }
+    }
 
     pub fn parse(color_space_buf: []const u8) error{InvalidColorSpace}!ColorSpace {
         var color_space_iter = std.mem.splitScalar(u8, color_space_buf, ':');
@@ -46,7 +104,7 @@ pub const ColorSpace = union(Enum) {
             @intFromEnum(Enum.index) => {
                 const index_buf = color_space_iter.next() orelse return error.InvalidColorSpace;
                 const index = std.fmt.parseUnsigned(u8, index_buf, 10) catch return error.InvalidColorSpace;
-                
+
                 return ColorSpace{ .index = index };
             },
 
@@ -73,6 +131,20 @@ pub const Position = union(Enum) {
     follow_main,
     xy: XY,
     area: Rectangle,
+
+    pub fn print(self: Position, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+        try writer.print("{d}", .{@intFromEnum(self)});
+
+        switch (self) {
+            .follow_main => {},
+            .xy => |xy| {
+                try writer.print(":{d}:{d}", .{ xy.x, xy.y });
+            },
+            .area => |area| {
+                try writer.print(":{d}:{d}:{d}:{d}", .{ area.top_left.x, area.top_left.y, area.bottom_right.x, area.bottom_right.y });
+            },
+        }
+    }
 
     pub fn parse(pos_buf: []const u8) error{InvalidPosition}!Position {
         var pos_param_iter = std.mem.splitScalar(u8, pos_buf, ':');

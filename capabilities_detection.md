@@ -67,15 +67,15 @@ indicates the setting of the mode. The Ps values are the same for the ANSI and D
 
 **Supported Response:** [CPR](https://vt100.net/docs/vt510-rm/CPR.html) Response with ``column == 3``
 
-## [Kitty Multi Cursor](https://sw.kovidgoyal.net/kitty/multiple-cursors-protocol)
-**Query:** CSI - ``> q``
-
-**Supported Response:** CSI - ``> {supported cursor shape};{supported cursor shape};... q``
-
 ## [Kitty Keyboard Protocol](https://sw.kovidgoyal.net/kitty/keyboard-protocol)
 **Query:** CSI - ``?u``
 
 **Supported Response:** CSI - ``? {flags} u``
+
+## [Kitty Multi Cursor](https://sw.kovidgoyal.net/kitty/multiple-cursors-protocol)
+**Query:** CSI - ``> q``
+
+**Supported Response:** CSI - ``> {supported cursor shape};{supported cursor shape};... q``
 
 ## [Kitty Graphics Protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol)
 **Query:** APC - ``Gi=1,s=1,v=1,a=q,t=d,f=24;AAAA`` - ST

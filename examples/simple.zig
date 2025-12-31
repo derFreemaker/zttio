@@ -35,7 +35,8 @@ pub fn main() !u8 {
     try tty.enableAndResetAlternativeScreen();
     try tty.stdout.print("winsize: {any}\n", .{tty.getWinsize()});
     try tty.stdout.print("caps: {any}\n", .{tty.caps});
-    try tty.writeHyperlink(.{ .uri = "https://google.com", .id = "" }, "google");
+    try tty.writeHyperlink(.{ .uri = "https://google.com", .params = .{ .id = "go" } }, "google");
+    try tty.stdout.writeByte('\n');
     try tty.stdout.writeByte('\n');
     try tty.flush();
 
@@ -43,8 +44,9 @@ pub fn main() !u8 {
         const event = tty.nextEvent();
         defer event.deinit(event_allocator);
 
+        try tty.moveCursor(.{ .up = 1 });
         try tty.resetLine();
-        try tty.stdout.print("{any}", .{event});
+        try tty.stdout.print("{any}\n", .{event});
 
         switch (event) {
             .key_press => |key| {

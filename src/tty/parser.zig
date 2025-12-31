@@ -545,7 +545,7 @@ fn parseCsi(self: *Parser, input: []const u8) error{OutOfMemory}!ParseResult {
             return .event(sequence.len, event);
         },
         'q' => {
-            // kitty multi cursor "CSI>... q" (TRAILER is " q")
+            // kitty multi cursor "CSI > ... TRAILER" (TRAILER is " q")
             // see https://sw.kovidgoyal.net/kitty/multiple-cursors-protocol/
             if (sequence[2] != '>' or sequence[sequence.len - 2] != ' ') return skip;
 
@@ -600,7 +600,7 @@ fn parseCsi(self: *Parser, input: []const u8) error{OutOfMemory}!ParseResult {
 
                     const cursor_color_space = MultiCursor.ColorSpace.parse(cursor_color_param_iter.rest()) catch return skip;
 
-                    return .event(sequence.len, Event{ .multi_cursor_color = MultiCursor.ColorReport{
+                    return .event(sequence.len, Event{ .multi_cursor_color = MultiCursor.Color{
                         .text_under_cursor = text_under_cursor_color_space,
                         .cursor = cursor_color_space,
                     } });
@@ -1383,7 +1383,7 @@ test "parse(CSI): kitty multi cursor color report" {
     {
         const input = MultiCursor.INTRODUCER ++ "101;30:0;40:1" ++ MultiCursor.TRAILER;
         const result = try parser.parse(input);
-        const expected = MultiCursor.ColorReport{
+        const expected = MultiCursor.Color{
             .text_under_cursor = .follow_main,
             .cursor = .special,
         };
@@ -1394,7 +1394,7 @@ test "parse(CSI): kitty multi cursor color report" {
     {
         const input = MultiCursor.INTRODUCER ++ "101;30:2:255:255:255;40:5:255" ++ MultiCursor.TRAILER;
         const result = try parser.parse(input);
-        const expected = MultiCursor.ColorReport{
+        const expected = MultiCursor.Color{
             .text_under_cursor = .{ .rgb = .{ 255, 255, 255 } },
             .cursor = .{ .index = 255 },
         };

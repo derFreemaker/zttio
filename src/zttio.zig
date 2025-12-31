@@ -1,3 +1,8 @@
+const std = @import("std");
+test {
+    _ = std.testing.refAllDecls(@This());
+}
+
 const common = @import("common");
 
 pub const cltseqs = common.cltseqs;
@@ -12,5 +17,6 @@ pub const Event = common.Event;
 pub const Key = common.Key;
 pub const Mouse = common.Mouse;
 pub const Winsize = common.Winsize;
+pub const MultiCursor = common.MultiCursor;
 
 pub const Tty = @import("tty");
