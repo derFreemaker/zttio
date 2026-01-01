@@ -35,7 +35,7 @@ pub fn main() !u8 {
     try tty.enableAndResetAlternativeScreen();
     try tty.stdout.print("winsize: {any}\n", .{tty.getWinsize()});
     try tty.stdout.print("caps: {any}\n", .{tty.caps});
-    try tty.writeHyperlink(.{ .uri = "https://google.com", .params = .{ .id = "go" } }, "google");
+    try tty.writeHyperlink(.{ .uri = "https://github.com/derFreemaker/zttio" }, "github");
     try tty.stdout.writeByte('\n');
     try tty.stdout.writeByte('\n');
     try tty.flush();
