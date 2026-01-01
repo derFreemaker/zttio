@@ -60,9 +60,15 @@ pub const Event = union(enum) {
 
                 return event.*;
             },
+
             .paste => |p| {
                 return Event{ .paste = try allocator.dupe(u8, p) };
             },
+
+            .multi_cursors => |mc| {
+                return Event{ .multi_cursors = try allocator.dupe(MultiCursor.Report, mc) };
+            },
+
             else => return event.*,
         }
     }

@@ -5,7 +5,10 @@ const ctlseqs = @import("ctlseqs.zig");
 pub const INTRODUCER = ctlseqs.CSI ++ ">";
 pub const TRAILER = " q";
 
-pub const reset = INTRODUCER ++ "0;4" ++ TRAILER;
+pub const QUERY_CURRENT_CURSORS = INTRODUCER ++ "100" ++ TRAILER;
+pub const QUERY_CURRENT_CURSORS_COLOR = INTRODUCER ++ "101" ++ TRAILER;
+
+pub const RESET = INTRODUCER ++ "0;4" ++ TRAILER;
 
 pub fn add(writer: *std.Io.Writer, shape: Shape, positions: []const Position) std.Io.Writer.Error!void {
     try writer.writeAll(INTRODUCER);

@@ -406,6 +406,14 @@ pub fn setTextUnderMultiCursorsColor(self: *Tty, color: common.MultiCursor.Color
     return common.MultiCursor.setTextUnderCursorColor(self.stdout, color);
 }
 
+pub fn requestMultiCursors(self: *Tty) std.Io.Writer.Error!void {
+    return self.stdout.writeAll(common.MultiCursor.QUERY_CURRENT_CURSORS);
+}
+
+pub fn requestMultiCursorsColor(self: *Tty) std.Io.Writer.Error!void {
+    return self.stdout.writeAll(common.MultiCursor.QUERY_CURRENT_CURSORS_COLOR);
+}
+
 pub const Options = struct {
     kitty_keyboard_flags: ctlseqs.Terminal.KittyKeyboardFlags = .default,
 };
