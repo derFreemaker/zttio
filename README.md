@@ -30,12 +30,15 @@ from [libvaxis](https://github.com/rockorager/libvaxis/tree/11f53c701ae6b5633582
 - [Scaled Text](https://sw.kovidgoyal.net/kitty/text-sizing-protocol) (OSC 66)
 - [Explicit Width](https://sw.kovidgoyal.net/kitty/text-sizing-protocol) (OSC 66)
 - [Kitty Multi Cursor](https://sw.kovidgoyal.net/kitty/multiple-cursors-protocol)
+- [Kitty Image Protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol)
 
-[//]: # (- Images &#40;kitty, sixel, ...&#41;)
+## Not Planned Features (can be contributed)
+- Kitty Image Protocol using Shared Memory
+- [Sixel](https://en.wikipedia.org/wiki/Sixel)
+- [iTerm2 Image Protocol](https://iterm2.com/documentation-images.html)
 
 ## Dependencies
 
 - [zigwin32](https://github.com/marlersoft/zigwin32)
 - [uucode](https://github.com/jacobsandlund/uucode)
-
-[//]: # (- [zigimg]&#40;https://github.com/zigimg/zigimg&#41;)
+- [zigimg](https://github.com/zigimg/zigimg)

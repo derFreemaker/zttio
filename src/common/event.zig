@@ -5,6 +5,7 @@ const Mouse = @import("mouse.zig");
 const Color = @import("color.zig").Color;
 const Winsize = @import("winsize.zig");
 const MultiCursor = @import("multi_cursor.zig");
+const KittyGraphics = @import("graphics/kitty_graphics.zig");
 
 pub const Event = union(enum) {
     key_press: Key,
@@ -26,15 +27,26 @@ pub const Event = union(enum) {
     multi_cursors: []const MultiCursor.Report,
     multi_cursor_color: MultiCursor.Color,
 
-    pub fn deinit(event: *const Event, allocator: std.mem.Allocator) void {
+    kitty_graphics_response: KittyGraphics.Response,
+
+    pub fn deinit(event: *Event, allocator: std.mem.Allocator) void {
         switch (event.*) {
             .key_press, .key_release => |key| {
                 if (key.text) |text| {
                     allocator.free(text);
                 }
             },
+
             .paste => |p| {
                 allocator.free(p);
+            },
+
+            .multi_cursors => |mc| {
+                allocator.free(mc);
+            },
+
+            .kitty_graphics_response => |*kg| {
+                kg.deinit(allocator);
             },
             else => {},
         }
@@ -42,20 +54,11 @@ pub const Event = union(enum) {
 
     pub fn clone(event: *const Event, allocator: std.mem.Allocator) error{OutOfMemory}!Event {
         switch (event.*) {
-            .key_press => |key| {
+            .key_press, .key_release => |key| {
                 if (key.text) |text| {
                     var new_key = key;
                     new_key.text = try allocator.dupe(u8, text);
                     return Event{ .key_press = new_key };
-                }
-
-                return event.*;
-            },
-            .key_release => |key| {
-                if (key.text) |text| {
-                    var new_key = key;
-                    new_key.text = try allocator.dupe(u8, text);
-                    return Event{ .key_release = new_key };
                 }
 
                 return event.*;
@@ -67,6 +70,10 @@ pub const Event = union(enum) {
 
             .multi_cursors => |mc| {
                 return Event{ .multi_cursors = try allocator.dupe(MultiCursor.Report, mc) };
+            },
+
+            .kitty_graphics_response => |kg| {
+                return Event{ .kitty_graphics_response = try kg.clone(allocator) };
             },
 
             else => return event.*,

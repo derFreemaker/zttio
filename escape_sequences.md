@@ -110,4 +110,5 @@ _completely ignored_
 ## APC
 **Introducer:** ``ESC _``
 
-_completely ignored_
+### [Kitty Image Protocol Response](https://sw.kovidgoyal.net/kitty/graphics-protocol)
+- ``G...`` -> ``kitty_graphics_response``

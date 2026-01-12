@@ -7,8 +7,9 @@ const Event = common.Event;
 const Key = common.Key;
 const Mouse = common.Mouse;
 const Winsize = common.Winsize;
-const MultiCursor = common.MultiCursor;
-const ctlseqs = common.cltseqs;
+const ctlseqs = common.ctlseqs;
+const MultiCursor = ctlseqs.MultiCursor;
+const KittyGraphics = ctlseqs.KittyGraphics;
 
 const log = std.log.scoped(.zttio_tty_parser);
 
@@ -47,7 +48,7 @@ pub fn parse(self: *Parser, input: []const u8) !ParseResult {
             '[' => return self.parseCsi(input),
             ']' => return self.parseOsc(input),
             '^' => return skipUntilST(input), // PM
-            '_' => return skipUntilST(input), // APC
+            '_' => return parseApc(input), // APC
             else => {
                 // Anything else is an "alt + <char>" keypress
                 const key: Key = .{
@@ -189,15 +190,15 @@ fn parseOsc(self: *Parser, input: []const u8) !ParseResult {
     // The complete OSC sequence
     const sequence = input[0..end];
 
-    const null_event: ParseResult = .skip(sequence.len);
+    const skip: ParseResult = .skip(sequence.len);
 
-    const semicolon_idx = std.mem.indexOfScalarPos(u8, input, 2, ';') orelse return null_event;
-    const ps = std.fmt.parseUnsigned(u8, input[2..semicolon_idx], 10) catch return null_event;
+    const semicolon_idx = std.mem.indexOfScalarPos(u8, input, 2, ';') orelse return skip;
+    const ps = std.fmt.parseUnsigned(u8, input[2..semicolon_idx], 10) catch return skip;
 
     switch (ps) {
         4 => {
-            const color_idx_delim = std.mem.indexOfScalarPos(u8, input, semicolon_idx + 1, ';') orelse return null_event;
-            const ps_idx = std.fmt.parseUnsigned(u8, input[semicolon_idx + 1 .. color_idx_delim], 10) catch return null_event;
+            const color_idx_delim = std.mem.indexOfScalarPos(u8, input, semicolon_idx + 1, ';') orelse return skip;
+            const ps_idx = std.fmt.parseUnsigned(u8, input[semicolon_idx + 1 .. color_idx_delim], 10) catch return skip;
             const color_spec = if (bel_terminated)
                 input[color_idx_delim + 1 .. sequence.len - 1]
             else
@@ -232,7 +233,7 @@ fn parseOsc(self: *Parser, input: []const u8) !ParseResult {
             return .event(sequence.len, Event{ .color_report = event });
         },
         52 => {
-            if (input[semicolon_idx + 1] != 'c') return null_event;
+            if (input[semicolon_idx + 1] != 'c') return skip;
             const payload = if (bel_terminated)
                 input[semicolon_idx + 3 .. sequence.len - 1]
             else
@@ -246,7 +247,7 @@ fn parseOsc(self: *Parser, input: []const u8) !ParseResult {
 
             return .event(sequence.len, Event{ .paste = text });
         },
-        else => return null_event,
+        else => return skip,
     }
 }
 
@@ -607,6 +608,74 @@ fn parseCsi(self: *Parser, input: []const u8) error{OutOfMemory}!ParseResult {
                 },
                 else => return skip,
             }
+        },
+        else => return skip,
+    }
+}
+
+fn parseApc(input: []const u8) ParseResult {
+    if (input.len < 3) return .none;
+
+    const end = blk: {
+        const skip = skipUntilST(input).n;
+        if (skip == 0) return .none;
+
+        break :blk skip;
+    };
+    const sequence = input[0..end];
+    const skip: ParseResult = .skip(sequence.len);
+
+    switch (sequence[2]) {
+        'G' => {
+            const semicolon_idx = std.mem.indexOfScalarPos(u8, sequence, 3, ';') orelse return skip;
+
+            var maybe_image_id: ?u32 = null;
+            var maybe_image_num: ?u32 = null;
+
+            const param_buf = sequence[3..semicolon_idx];
+            var param_iter = std.mem.splitScalar(u8, param_buf, ',');
+            while (param_iter.next()) |param| {
+                switch (param[0]) {
+                    'i' => {
+                        maybe_image_id = parseParam(u32, param[2..], null) orelse return skip;
+                    },
+                    'I' => {
+                        maybe_image_num = parseParam(u32, param[2..], null);
+                    },
+                    else => {},
+                }
+            }
+
+            // it says no were what flags are always provided,
+            // we are assuming the id flag 'i' is always provided
+            const image_id = maybe_image_id orelse return skip;
+
+            const content_buf = sequence[semicolon_idx + 1 .. sequence.len - 2];
+            if (content_buf.len == 0) return skip;
+
+            const colon_idx = std.mem.indexOfScalar(u8, content_buf, ':') orelse content_buf.len;
+            const response_type_buf = content_buf[0..colon_idx];
+            if (std.mem.eql(u8, response_type_buf, "OK")) {
+                return .event(sequence.len, Event{ .kitty_graphics_response = .{
+                    .id = image_id,
+                    .num = maybe_image_num,
+                    .msg = .ok,
+                } });
+            }
+
+            var response: KittyGraphics.Response = .{
+                .id = image_id,
+                .num = maybe_image_num,
+                .msg = .{ .err = .{
+                    .type = response_type_buf,
+                } },
+            };
+
+            if (content_buf.len > response_type_buf.len) {
+                response.msg.err.msg = content_buf[colon_idx + 1 ..];
+            }
+
+            return .event(sequence.len, Event{ .kitty_graphics_response = response });
         },
         else => return skip,
     }
@@ -1398,7 +1467,7 @@ test "parse(CSI): kitty multi cursor color report" {
             .text_under_cursor = .{ .rgb = .{ 255, 255, 255 } },
             .cursor = .{ .index = 255 },
         };
-        
+
         try testing.expectEqual(input.len, result.n);
         try testing.expectEqual(expected, result.parse.event.multi_cursor_color);
     }
@@ -1505,11 +1574,51 @@ test "parse(OSC 52): paste" {
     const result = try parser.parse(input);
     const expected_text = "osc52 paste";
 
-    try testing.expectEqual(25, result.n);
-    switch (result.parse.event) {
-        .paste => |text| {
-            try testing.expectEqualStrings(expected_text, text);
-        },
-        else => try testing.expect(false),
+    try testing.expectEqual(input.len, result.n);
+    try testing.expectEqualStrings(expected_text, result.parse.event.paste);
+}
+
+test "parse(APC): Kitty Graphics Protocol Reponse" {
+    const KG = KittyGraphics;
+
+    const alloc = testing.allocator;
+    var parser: Parser = .init(alloc);
+    defer parser.deinit();
+
+    {
+        const input = KG.INTRODUCER ++ "i=99,I=13;OK" ++ KG.CLOSE;
+        const result = try parser.parse(input);
+        const expected_response = KG.Response{
+            .id = 99,
+            .num = 13,
+            .msg = .ok,
+        };
+
+        try testing.expectEqual(input.len, result.n);
+        try testing.expectEqual(expected_response, result.parse.event.kitty_graphics_response);
+    }
+    {
+        const input = KG.INTRODUCER ++ "i=123;EBADPNG:some extra error msg" ++ KG.CLOSE;
+        const result = try parser.parse(input);
+        const expected_response = KG.Response{
+            .id = 123,
+            .msg = .{ .err = .{
+                .type = "EBADPNG",
+                .msg = "some extra error msg",
+            } },
+        };
+
+        try testing.expectEqual(input.len, result.n);
+
+        const kgr = result.parse.event.kitty_graphics_response;
+        try testing.expectEqual(expected_response.id, kgr.id);
+        try testing.expectEqual(expected_response.num, kgr.num);
+        try testing.expectEqualStrings(expected_response.msg.err.type, kgr.msg.err.type);
+        try testing.expectEqualStrings(expected_response.msg.err.msg.?, kgr.msg.err.msg.?);
+    }
+    {
+        const input = KG.INTRODUCER ++ "I=123;ENOID;should be skipped since no id was returned" ++ KG.CLOSE;
+        const result = try parser.parse(input);
+        try testing.expectEqual(ParseResult.skip(input.len), result);
     }
 }

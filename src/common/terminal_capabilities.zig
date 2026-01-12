@@ -39,22 +39,31 @@ kitty_graphics: bool = false,
 rgb: bool = false,
 
 /// Queries the terminal capabilities and blocks, until primary device attributes response is found.
-pub fn query(stdin: std.fs.File, stdout: std.fs.File) error{ NoTty, ReadFailed, WriteFailed, EndOfStream }!TerminalCapabilities {
-    try sendQuery(stdout);
-    return parseQueryResponses(stdin);
-}
-
-pub fn sendQuery(stdout: std.fs.File) error{ NoTty, WriteFailed }!void {
+pub fn query(stdin: std.fs.File, stdout: std.fs.File, timeout_ms: u32) error{ NoTty, ReadFailed, WriteFailed, EndOfStream }!TerminalCapabilities {
     if (!stdout.isTty()) return error.NoTty;
 
     var writer_buf: [32]u8 = undefined;
     var _writer = stdout.writer(&writer_buf);
     const writer = &_writer.interface;
 
-    const queries = ctlseqs.Queries;
-
     try writer.writeAll(ctlseqs.Screen.save ++
-        ctlseqs.Cursor.save_position);
+        ctlseqs.Cursor.save_position ++ "detecting terminal capabilities...");
+
+    try writeQuery(writer);
+    try writer.flush();
+
+    const caps = try parseQueryResponses(stdin, timeout_ms);
+
+    try writer.writeAll(ctlseqs.Cursor.restore_position ++
+        ctlseqs.Erase.line ++ // erase: "detecting terminal capabilities..."
+        ctlseqs.Screen.restore);
+    try writer.flush();
+
+    return caps;
+}
+
+pub fn writeQuery(writer: *std.Io.Writer) error{ NoTty, WriteFailed }!void {
+    const queries = ctlseqs.Queries;
 
     try writer.writeAll(queries.decrqm_focus ++
         queries.decrqm_sync ++
@@ -83,18 +92,13 @@ pub fn sendQuery(stdout: std.fs.File) error{ NoTty, WriteFailed }!void {
         queries.kitty_keyboard ++
         queries.kitty_graphics ++
         queries.primary_device_attrs);
-
-    try writer.writeAll(ctlseqs.Screen.restore ++
-        ctlseqs.Cursor.restore_position);
-
-    try writer.flush();
 }
 
 /// Will block until the primary device attributes are found.
 /// Recommended to use `query()`.
 ///
 /// TODO: maybe add timeout
-pub fn parseQueryResponses(stdin: std.fs.File) error{ ReadFailed, EndOfStream }!TerminalCapabilities {
+pub fn parseQueryResponses(stdin: std.fs.File, timeout_ms: u32) error{ ReadFailed, EndOfStream }!TerminalCapabilities {
     var reader_buf: [32]u8 = undefined;
     var _reader: std.fs.File.Reader = .initStreaming(stdin, &reader_buf);
     const reader = &_reader.interface;
@@ -123,9 +127,14 @@ pub fn parseQueryResponses(stdin: std.fs.File) error{ ReadFailed, EndOfStream }!
         }
     }
 
-    var buf: [128]u8 = undefined;
+    const end_ms = std.time.milliTimestamp() + timeout_ms;
+    var buf: [256]u8 = undefined;
     var i: usize = 0;
     while (true) {
+        if (end_ms < std.time.milliTimestamp()) {
+            break;
+        }
+
         switch (builin.os.tag) {
             .windows => {
                 buf[i] = try reader.takeByte();

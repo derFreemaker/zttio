@@ -34,9 +34,7 @@ break_state: uucode.grapheme.BreakState = .default,
 
 queue: Queue(Event, 512),
 
-winsize: Winsize,
-
-pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, stdin: std.fs.File.Handle, stdout: std.fs.File.Handle) error{ OutOfMemory, UnableToGetWinsize }!Reader {
+pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, stdin: std.fs.File.Handle, stdout: std.fs.File.Handle) error{ OutOfMemory }!Reader {
     return Reader{
         .allocator = allocator,
         .event_allocator = event_allocator,
@@ -49,8 +47,6 @@ pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, st
         .buf = .empty,
 
         .queue = try .init(allocator),
-
-        .winsize = InternalReader.getWinsize(stdout) catch return error.UnableToGetWinsize,
     };
 }
 
@@ -63,10 +59,10 @@ pub fn deinit(self: *Reader, allocator: std.mem.Allocator) void {
     self.buf.deinit(self.allocator);
 
     const enqueued = self.queue.enqueued();
-    for (enqueued.first) |event| {
+    for (enqueued.first) |*event| {
         event.deinit(self.event_allocator);
     }
-    for (enqueued.second) |event| {
+    for (enqueued.second) |*event| {
         event.deinit(self.event_allocator);
     }
     self.queue.deinit(allocator);
@@ -81,19 +77,12 @@ pub fn stop(self: *Reader) void {
     const thread = self.thread orelse return;
     self.should_quit = true;
     thread.join();
-
+    
     self.thread = null;
     self.should_quit = false;
 }
 
 pub fn postEvent(self: *Reader, event: Event) void {
-    switch (event) {
-        .winsize => |winsize| {
-            self.winsize = winsize;
-        },
-        else => {},
-    }
-
     return self.queue.push(event);
 }
 
@@ -103,7 +92,7 @@ pub fn nextEvent(self: *Reader) Event {
 
 fn runReader(self: *Reader) !void {
     if (builtin.is_test) return;
-
+    
     while (!self.should_quit) {
         const may_read_result = try self.internal.next(self.event_allocator);
         const read_result = may_read_result orelse {

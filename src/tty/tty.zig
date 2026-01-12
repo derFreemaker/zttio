@@ -2,7 +2,8 @@ const std = @import("std");
 const builtin = @import("builtin");
 const common = @import("common");
 
-const ctlseqs = common.cltseqs;
+const ctlseqs = common.ctlseqs;
+const KittyGraphics = ctlseqs.KittyGraphics;
 const RawMode = common.RawMode;
 const Event = common.Event;
 const Winsize = common.Winsize;
@@ -15,11 +16,14 @@ const DebugAllocator = if (builtin.mode == .Debug)
         .never_unmap = true,
         .retain_metadata = true,
         .stack_trace_frames = 50,
+        .canary = @truncate(0xff23ab2123cdef96),
     })
 else
     void;
 
 const log = std.log.scoped(.zttio_tty);
+
+const HelperError = std.Io.Writer.Error || error{CapabilityNotSupported};
 
 const Tty = @This();
 
@@ -37,11 +41,12 @@ stdout_writer: std.fs.File.Writer,
 stdout: *std.Io.Writer,
 
 reader: Reader,
+winsize: Winsize,
 
 opts: Options,
 caps: TerminalCapabilities,
 
-pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, stdin: std.fs.File, stdout: std.fs.File, caps: ?TerminalCapabilities, opts: Options) error{ OutOfMemory, NoTty, UnableToEnterRawMode, UnableToQueryTerminalCapabilities, UnableToGetWinsize, UnableToStartReader }!*Tty {
+pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, stdin: std.fs.File, stdout: std.fs.File, caps: ?TerminalCapabilities, opts: Options) error{ OutOfMemory, WriteFailed, NoTty, UnableToEnterRawMode, UnableToQueryTerminalCapabilities, UnableToGetWinsize, UnableToStartReader }!*Tty {
     if (!stdin.isTty()) return error.NoTty;
     const raw_mode = RawMode.enable(stdin.handle, stdout.handle) catch return error.UnableToEnterRawMode;
 
@@ -77,26 +82,26 @@ pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, st
     errdefer ptr.reader.deinit(ptr.allocator);
 
     ptr.opts = opts;
-    ptr.caps = caps orelse common.TerminalCapabilities.query(stdin, stdout) catch return error.UnableToQueryTerminalCapabilities;
+    ptr.caps = caps orelse common.TerminalCapabilities.query(stdin, stdout, 5 * std.time.ms_per_s) catch return error.UnableToQueryTerminalCapabilities;
 
     ptr.reader.start() catch |err| switch (err) {
         error.OutOfMemory => return error.OutOfMemory,
         else => return error.UnableToStartReader,
     };
 
-    ptr.stdout.writeAll(ctlseqs.Terminal.braketed_paste_set) catch {};
+    try ptr.stdout.writeAll(ctlseqs.Terminal.braketed_paste_set);
     if (ptr.caps.in_band_winsize) {
-        ptr.stdout.writeAll(ctlseqs.Terminal.in_band_resize_set) catch {};
+        try ptr.stdout.writeAll(ctlseqs.Terminal.in_band_resize_set);
     }
     if (ptr.caps.sgr_pixels) {
-        ptr.stdout.writeAll(ctlseqs.Terminal.mouse_set_pixels) catch {};
+        try ptr.stdout.writeAll(ctlseqs.Terminal.mouse_set_pixels);
     } else {
-        ptr.stdout.writeAll(ctlseqs.Terminal.mouse_set) catch {};
+        try ptr.stdout.writeAll(ctlseqs.Terminal.mouse_set);
     }
     if (ptr.caps.kitty_keyboard != null) {
-        ctlseqs.Terminal.setKittyKeyboardHandling(ptr.stdout, opts.kitty_keyboard_flags) catch {};
+        try ctlseqs.Terminal.setKittyKeyboardHandling(ptr.stdout, opts.kitty_keyboard_flags);
     }
-    ptr.stdout.flush() catch {};
+    try ptr.stdout.flush();
 
     switch (builtin.os.tag) {
         .windows => {},
@@ -116,6 +121,8 @@ pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, st
         },
     }
 
+    ptr.winsize = Reader.InternalReader.getWinsize(stdout.handle) catch return error.UnableToGetWinsize;
+
     return ptr;
 }
 
@@ -130,13 +137,8 @@ pub fn deinit(self: *Tty) void {
     }
 
     self.reader.deinit(self.allocator);
-    self.raw_mode.disable();
 
-    self.stdout.writeAll(ctlseqs.Terminal.braketed_paste_reset ++ ctlseqs.Terminal.mouse_reset) catch {};
-    if (self.caps.in_band_winsize) {
-        self.stdout.writeAll(ctlseqs.Terminal.in_band_resize_reset) catch {};
-    }
-    self.stdout.flush() catch {};
+    self.revertTerminal();
     self.allocator.free(self.stdout_writer_buf);
 
     if (builtin.mode == .Debug) {
@@ -148,16 +150,29 @@ pub fn deinit(self: *Tty) void {
     allocator.destroy(self);
 }
 
-pub fn panicDeinit(self: *Tty) void {
+/// Makes tty basically useless and probably crashes reader thread.
+pub fn revertTerminal(self: *Tty) void {
+    self.reader.stop();
     self.raw_mode.disable();
+
+    if (self.caps.kitty_keyboard) |detail| {
+        ctlseqs.Terminal.setKittyKeyboardHandling(self.stdout, detail) catch {};
+    }
+    if (self.caps.in_band_winsize) {
+        self.stdout.writeAll(ctlseqs.Terminal.in_band_resize_reset) catch {};
+    }
+    self.stdout.writeAll(ctlseqs.Terminal.braketed_paste_reset) catch {};
+    self.stdout.writeAll(ctlseqs.Terminal.mouse_reset) catch {};
+    self.stdout.flush() catch {};
 }
 
 pub inline fn strWidth(self: *Tty, str: []const u8) usize {
     return common.gwidth.gwidth(str, self.caps.unicode_width_method);
 }
 
-pub inline fn getWinsize(self: *const Tty) Winsize {
-    return self.reader.winsize;
+pub inline fn updateWinsize(self: *Tty) error{UnableToGetWinsize}!Winsize {
+    self.winsize = Reader.InternalReader.getWinsize(self.stdout_handle) catch return error.UnableToGetWinsize;
+    return self.winsize;
 }
 
 pub inline fn nextEvent(self: *Tty) Event {
@@ -302,7 +317,7 @@ pub fn moveCursor(self: *Tty, move_cursor: MoveCursor) std.Io.Writer.Error!void 
             return self.moveCursor(.{ .column = 0 });
         },
         .end => {
-            return self.moveCursor(.{ .column = self.getWinsize().cols });
+            return self.moveCursor(.{ .column = self.winsize.cols });
         },
     }
 }
@@ -323,8 +338,8 @@ pub const MoveCursor = union(enum) {
     end,
 
     pub const Pos = struct {
-        row: u16,
-        column: u16,
+        row: u16 = 0,
+        column: u16 = 0,
     };
 };
 
@@ -359,59 +374,130 @@ pub fn resetLine(self: *Tty) std.Io.Writer.Error!void {
 pub fn writeHyperlink(self: *Tty, hyperlink: ctlseqs.Hyperlink, text: []const u8) std.Io.Writer.Error!void {
     try hyperlink.introduce(self.stdout);
     try self.stdout.writeAll(text);
-    try self.stdout.writeAll(ctlseqs.Hyperlink.reset);
+    try self.stdout.writeAll(ctlseqs.Hyperlink.close);
 }
 
-pub fn startSync(self: *Tty) std.Io.Writer.Error!void {
+pub fn startSync(self: *Tty) HelperError!void {
+    if (!self.caps.sync) return error.CapabilityNotSupported;
+
     return self.stdout.writeAll(ctlseqs.Terminal.sync_begin);
 }
 
-pub fn endSync(self: *Tty) std.Io.Writer.Error!void {
+pub fn endSync(self: *Tty) HelperError!void {
+    if (!self.caps.sync) return error.CapabilityNotSupported;
+
     return self.stdout.writeAll(ctlseqs.Terminal.sync_end);
 }
 
-pub fn beginScaledText(self: *Tty, scaled: ctlseqs.Text.Scaled) std.Io.Writer.Error!void {
+pub fn beginScaledText(self: *Tty, scaled: ctlseqs.Text.Scaled) HelperError!void {
+    if (!self.caps.explicit_width) return error.CapabilityNotSupported;
+
     return ctlseqs.Text.introduceScaled(self.stdout, scaled);
 }
 
-pub fn endScaledText(self: *Tty) std.Io.Writer.Error!void {
+pub fn endScaledText(self: *Tty) HelperError!void {
+    if (!self.caps.explicit_width) return error.CapabilityNotSupported;
+
     return self.stdout.writeAll(ctlseqs.Text.end_scaled_or_explicit_width);
 }
 
-pub fn beginExplicitWidthText(self: *Tty, width: u3) std.Io.Writer.Error!void {
+pub fn beginExplicitWidthText(self: *Tty, width: u3) HelperError!void {
+    if (!self.caps.explicit_width) return error.CapabilityNotSupported;
+
     return ctlseqs.Text.introduceExplicitWidth(self.stdout, width);
 }
 
-pub fn endExplicitWidthText(self: *Tty) std.Io.Writer.Error!void {
+pub fn endExplicitWidthText(self: *Tty) HelperError!void {
+    if (!self.caps.explicit_width) return error.CapabilityNotSupported;
+
     return self.stdout.writeAll(ctlseqs.Text.end_scaled_or_explicit_width);
 }
 
-pub fn addCursor(self: *Tty, shape: common.MultiCursor.Shape, positions: []const common.MultiCursor.Position) std.Io.Writer.Error!void {
-    return common.MultiCursor.add(self.stdout, shape, positions);
+pub fn addCursor(self: *Tty, shape: ctlseqs.MultiCursor.Shape, positions: []const ctlseqs.MultiCursor.Position) HelperError!void {
+    const multi_caps = self.caps.multi_cursor orelse return error.CapabilityNotSupported;
+    switch (shape) {
+        .block => if (!multi_caps.block) return error.CapabilityNotSupported,
+        .beam => if (!multi_caps.beam) return error.CapabilityNotSupported,
+        .underline => if (!multi_caps.underline) return error.CapabilityNotSupported,
+        .follow_main => if (!multi_caps.follow_main_cursor) return error.CapabilityNotSupported,
+    }
+
+    return ctlseqs.MultiCursor.add(self.stdout, shape, positions);
 }
 
-pub fn removeCursor(self: *Tty, positions: []const common.MultiCursor.Position) std.Io.Writer.Error!void {
-    return common.MultiCursor.remove(self.stdout, positions);
+pub fn removeCursor(self: *Tty, positions: []const ctlseqs.MultiCursor.Position) HelperError!void {
+    if (self.caps.multi_cursor == null) return error.CapabilityNotSupported;
+    return ctlseqs.MultiCursor.remove(self.stdout, positions);
 }
 
-pub fn clearCursor(self: *Tty) std.Io.Writer.Error!void {
-    return self.stdout.writeAll(common.MultiCursor.reset);
+pub fn clearCursor(self: *Tty) HelperError!void {
+    if (self.caps.multi_cursor == null) return error.CapabilityNotSupported;
+    return self.stdout.writeAll(ctlseqs.MultiCursor.RESET);
 }
 
-pub fn setMultiCursorsColor(self: *Tty, color: common.MultiCursor.ColorSpace) std.Io.Writer.Error!void {
-    return common.MultiCursor.setCursorColor(self.stdout, color);
+pub fn setMultiCursorsColor(self: *Tty, color: ctlseqs.MultiCursor.ColorSpace) HelperError!void {
+    const multi_caps = self.caps.multi_cursor orelse return error.CapabilityNotSupported;
+    if (!multi_caps.change_color_of_extra_cursors) return error.CapabilityNotSupported;
+
+    return ctlseqs.MultiCursor.setCursorColor(self.stdout, color);
 }
 
-pub fn setTextUnderMultiCursorsColor(self: *Tty, color: common.MultiCursor.ColorSpace) std.Io.Writer.Error!void {
-    return common.MultiCursor.setTextUnderCursorColor(self.stdout, color);
+pub fn setTextUnderMultiCursorsColor(self: *Tty, color: ctlseqs.MultiCursor.ColorSpace) HelperError!void {
+    const multi_caps = self.caps.multi_cursor orelse return error.CapabilityNotSupported;
+    if (!multi_caps.change_color_of_text_under_extra_cursors) return error.CapabilityNotSupported;
+
+    return ctlseqs.MultiCursor.setTextUnderCursorColor(self.stdout, color);
 }
 
-pub fn requestMultiCursors(self: *Tty) std.Io.Writer.Error!void {
-    return self.stdout.writeAll(common.MultiCursor.QUERY_CURRENT_CURSORS);
+pub fn requestMultiCursors(self: *Tty) HelperError!void {
+    const multi_caps = self.caps.multi_cursor orelse return error.CapabilityNotSupported;
+    if (!multi_caps.query_currently_set_cursors) return error.CapabilityNotSupported;
+
+    return self.stdout.writeAll(ctlseqs.MultiCursor.QUERY_CURRENT_CURSORS);
 }
 
-pub fn requestMultiCursorsColor(self: *Tty) std.Io.Writer.Error!void {
-    return self.stdout.writeAll(common.MultiCursor.QUERY_CURRENT_CURSORS_COLOR);
+pub fn requestMultiCursorsColor(self: *Tty) HelperError!void {
+    const multi_caps = self.caps.multi_cursor orelse return error.CapabilityNotSupported;
+    if (!multi_caps.query_currently_set_cursor_colors) return error.CapabilityNotSupported;
+
+    return self.stdout.writeAll(ctlseqs.MultiCursor.QUERY_CURRENT_CURSORS_COLOR);
+}
+
+const KittyHelperTransmitError = KittyGraphics.Error || HelperError;
+
+pub fn transmitImageKitty(self: *Tty, source: common.Graphics.Source, opts: KittyGraphics.TransmitOnlyOptions) KittyHelperTransmitError!void {
+    if (!self.caps.kitty_graphics) return error.CapabilityNotSupported;
+    return KittyGraphics.transmitOnly(self.stdout, self.allocator, source, opts);
+}
+
+pub fn transmitAndDisplayImageKitty(self: *Tty, source: common.Graphics.Source, opts: KittyGraphics.TransmitAndDisplayOptions) KittyHelperTransmitError!void {
+    if (!self.caps.kitty_graphics) return error.CapabilityNotSupported;
+    return KittyGraphics.transmitAndDisplay(self.stdout, self.allocator, source, opts);
+}
+
+pub fn displayImageKitty(self: *Tty, opts: KittyGraphics.DisplayOnlyOptions) HelperError!void {
+    if (!self.caps.kitty_graphics) return error.CapabilityNotSupported;
+    return KittyGraphics.display(self.stdout, opts);
+}
+
+pub fn eraseImageKitty(self: *Tty, opts: KittyGraphics.EraseOptions) HelperError!void {
+    if (!self.caps.kitty_graphics) return error.CapabilityNotSupported;
+    return KittyGraphics.erase(self.stdout, opts);
+}
+
+pub fn transmitAnimationFrameKitty(self: *Tty, opts: KittyGraphics.TransmitAnimationFrameOptions) KittyHelperTransmitError!void {
+    if (!self.caps.kitty_graphics) return error.CapabilityNotSupported;
+    return KittyGraphics.transmitAnimationFrame(self.stdout, self.allocator, opts);
+}
+
+pub fn controlAnimationKitty(self: *Tty, opts: KittyGraphics.ControlAnimationOptions) HelperError!void {
+    if (!self.caps.kitty_graphics) return error.CapabilityNotSupported;
+    return KittyGraphics.controlAnimation(self.stdout, opts);
+}
+
+pub fn composeAnimationKitty(self: *Tty, opts: KittyGraphics.ComposeAnimationOptions) HelperError!void {
+    if (!self.caps.kitty_graphics) return error.CapabilityNotSupported;
+    return KittyGraphics.composeAnimation(self.stdout, opts);
 }
 
 pub const Options = struct {

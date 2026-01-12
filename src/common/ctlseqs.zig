@@ -102,6 +102,8 @@ pub const Cursor = struct {
     };
 };
 
+pub const MultiCursor = @import("multi_cursor.zig");
+
 pub const Erase = struct {
     pub const cursor_to_screen_end = CSI ++ "0J";
     pub const screen_begin_to_cursor = CSI ++ "1J";
@@ -123,7 +125,7 @@ pub const Screen = struct {
 };
 
 pub const Hyperlink = struct {
-    pub const reset = OSC ++ "8;;" ++ ST;
+    pub const close = OSC ++ "8;;" ++ ST;
 
     uri: []const u8,
     params: Params = .{},
@@ -336,7 +338,7 @@ pub const Text = struct {
     }
 };
 
-// pub const KittyGraphics = @import("kitty_graphics.zig");
+pub const KittyGraphics = @import("graphics/kitty_graphics.zig");
 
 // Color control sequences
 // pub const osc4_query = "\x1b]4;{d};?\x1b\\"; // color index {d}

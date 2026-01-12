@@ -5,7 +5,7 @@ test {
 
 const common = @import("common");
 
-pub const cltseqs = common.cltseqs;
+pub const ctlseqs = common.ctlseqs;
 pub const gwidth = common.gwidth;
 
 pub const Styling = common.Styling;
@@ -17,6 +17,5 @@ pub const Event = common.Event;
 pub const Key = common.Key;
 pub const Mouse = common.Mouse;
 pub const Winsize = common.Winsize;
-pub const MultiCursor = common.MultiCursor;
 
 pub const Tty = @import("tty");

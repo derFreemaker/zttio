@@ -1,6 +1,6 @@
 .{
     .name = .zttio,
-    .version = "0.1.0",
+    .version = "0.2.0",
     .fingerprint = 0xabd754137085977b, // Changing this has security and trust implications.
     .minimum_zig_version = "0.15.2",
     .dependencies = .{
@@ -13,10 +13,10 @@
             .url = "git+https://github.com/jacobsandlund/uucode#5f05f8f83a75caea201f12cc8ea32a2d82ea9732",
             .hash = "uucode-0.1.0-ZZjBPj96QADXyt5sqwBJUnhaDYs_qBeeKijZvlRa0eqM",
         },
-        // .zigimg = .{
-        //     .url = "git+https://github.com/zigimg/zigimg.git#eab2522c023b9259db8b13f2f90d609b7437e5f6",
-        //     .hash = "zigimg-0.1.0-8_eo2vUZFgAAtN1c6dAO5DdqL0d4cEWHtn6iR5ucZJti",
-        // },
+        .zigimg = .{
+            .url = "git+https://github.com/zigimg/zigimg.git#eab2522c023b9259db8b13f2f90d609b7437e5f6",
+            .hash = "zigimg-0.1.0-8_eo2vUZFgAAtN1c6dAO5DdqL0d4cEWHtn6iR5ucZJti",
+        },
     },
     .paths = .{
         "build.zig",
