@@ -11,16 +11,6 @@ const TerminalCapabilities = common.TerminalCapabilities;
 const Reader = @import("reader.zig");
 const SigwinchHandling = @import("sigwinch_handling.zig");
 
-const DebugAllocator = if (builtin.mode == .Debug)
-    std.heap.DebugAllocator(.{
-        .never_unmap = true,
-        .retain_metadata = true,
-        .stack_trace_frames = 50,
-        .canary = @truncate(0xff23ab2123cdef96),
-    })
-else
-    void;
-
 const log = std.log.scoped(.zttio_tty);
 
 const HelperError = std.Io.Writer.Error || error{CapabilityNotSupported};
@@ -32,7 +22,6 @@ stdout_handle: std.fs.File.Handle,
 raw_mode: RawMode,
 
 arena: std.heap.ArenaAllocator,
-debug_allocator: DebugAllocator,
 allocator: std.mem.Allocator,
 event_allocator: std.mem.Allocator,
 
@@ -58,19 +47,7 @@ pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, st
     ptr.raw_mode = raw_mode;
 
     ptr.arena = .init(allocator);
-    if (builtin.mode == .Debug) {
-        ptr.debug_allocator = DebugAllocator{
-            .backing_allocator = ptr.arena.allocator(),
-        };
-    }
-    errdefer if (builtin.mode == .Debug) {
-        if (ptr.debug_allocator.deinit() == .leak)
-            log.err("leaks found", .{});
-    };
-    ptr.allocator = if (builtin.mode == .Debug)
-        ptr.debug_allocator.allocator()
-    else
-        ptr.arena.allocator();
+    ptr.allocator = ptr.arena.allocator();
     ptr.event_allocator = event_allocator;
 
     ptr.stdout_writer_buf = try ptr.allocator.alloc(u8, 32 * 1024);
@@ -141,10 +118,6 @@ pub fn deinit(self: *Tty) void {
     self.revertTerminal();
     self.allocator.free(self.stdout_writer_buf);
 
-    if (builtin.mode == .Debug) {
-        if (self.debug_allocator.deinit() == .leak)
-            log.err("leaks found", .{});
-    }
     const allocator = self.arena.child_allocator;
     self.arena.deinit();
     allocator.destroy(self);
