@@ -1,8 +1,6 @@
 const std = @import("std");
 
 pub fn build(b: *std.Build) void {
-    const build_examples = b.option(bool, "examples", "build examples") orelse false;
-
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
@@ -98,19 +96,20 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_common_tests.step);
     test_step.dependOn(&run_tty_tests.step);
     
-    if (build_examples) {
-        b.installArtifact(b.addExecutable(.{
-            .name = "simple_example",
-            .root_module = b.createModule(.{
-                .target = target,
-                .optimize = optimize,
+    const simple_example_exe = b.addExecutable(.{
+        .name = "simple_example",
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
 
-                .root_source_file = b.path("examples/simple.zig"),
+            .root_source_file = b.path("examples/simple.zig"),
 
-                .imports = &.{
-                    .{ .name = "zttio", .module = zttio_mod },
-                },
-            }),
-        }));
-    }
+            .imports = &.{
+                .{ .name = "zttio", .module = zttio_mod },
+            },
+        }),
+    });
+    
+    const examples_step = b.step("examples", "build examples");
+    examples_step.dependOn(&simple_example_exe.step);
 }

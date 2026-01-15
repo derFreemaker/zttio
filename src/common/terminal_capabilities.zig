@@ -425,7 +425,18 @@ inline fn parseApc(input: []const u8, caps: *TerminalCapabilities) ParseResult {
 
     switch (input[2]) {
         'G' => {
-            caps.kitty_graphics = true;
+            const semicolon_idx = std.mem.indexOfScalarPos(u8, sequence, 3, ';') orelse return consume;
+
+            const content_buf = sequence[semicolon_idx + 1 .. sequence.len - 2];
+            if (content_buf.len == 0) return consume;
+
+            const colon_idx = std.mem.indexOfScalar(u8, content_buf, ':') orelse content_buf.len;
+            const response_type_buf = content_buf[0..colon_idx];
+
+            if (!std.mem.eql(u8, response_type_buf, "ENOTSUPPORTED")) {
+                caps.kitty_graphics = true;
+            }
+
             return consume;
         },
         else => return consume,
@@ -661,11 +672,23 @@ test "parse(CSI): Kitty Keyboard Protocol" {
 }
 
 test "parse(APC): Kitty Graphics Protocol" {
-    var caps = TerminalCapabilities{};
-    const input = ctlseqs.APC ++ "Gi=1;OK" ++ ctlseqs.ST;
-    const result = parse(input, &caps);
-    const expected: ParseResult = .consume(input.len);
+    {
+        var caps = TerminalCapabilities{};
+        const input = ctlseqs.APC ++ "Gi=1;OK" ++ ctlseqs.ST;
+        const result = parse(input, &caps);
+        const expected: ParseResult = .consume(input.len);
 
-    try testing.expectEqual(expected, result);
-    try testing.expect(caps.kitty_graphics);
+        try testing.expectEqual(expected, result);
+        try testing.expect(caps.kitty_graphics);
+    }
+
+    {
+        var caps = TerminalCapabilities{};
+        const input = ctlseqs.APC ++ "Gi=1;ENOTSUPPORTED" ++ ctlseqs.ST;
+        const result = parse(input, &caps);
+        const expected: ParseResult = .consume(input.len);
+
+        try testing.expectEqual(expected, result);
+        try testing.expect(!caps.kitty_graphics);
+    }
 }
