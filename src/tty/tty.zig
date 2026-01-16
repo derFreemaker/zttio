@@ -239,6 +239,14 @@ pub fn setMouseEvents(self: *Tty, enable: bool) std.Io.Writer.Error!void {
     }
 }
 
+pub fn hideCursor(self: *Tty) std.Io.Writer.Error!void {
+    return self.stdout.writeAll(ctlseqs.Cursor.hide);
+}
+
+pub fn showCursor(self: *Tty) std.Io.Writer.Error!void {
+    return self.stdout.writeAll(ctlseqs.Cursor.show);
+}
+
 pub fn saveCursorPos(self: *Tty) std.Io.Writer.Error!void {
     return self.stdout.writeAll(ctlseqs.Cursor.save_position);
 }

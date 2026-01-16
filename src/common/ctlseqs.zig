@@ -85,8 +85,8 @@ pub const Cursor = struct {
     pub const save_position = ESC ++ "7";
     pub const restore_position = ESC ++ "8";
 
-    pub const hide_cursor = CSI ++ "?25l";
-    pub const show_cursor = CSI ++ "?25h";
+    pub const hide = CSI ++ "?25l";
+    pub const show = CSI ++ "?25h";
 
     pub const set_cursor_shape = CSI ++ "{d} q";
     pub fn setCursorShape(writer: *std.Io.Writer, shape: Shape) std.Io.Writer.Error!void {
