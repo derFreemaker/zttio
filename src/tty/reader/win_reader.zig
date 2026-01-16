@@ -30,19 +30,14 @@ pub fn init(stdin: std.fs.File.Handle, stdout: std.fs.File.Handle) WinReader {
 }
 
 pub fn getWinsize(stdout_handle: std.fs.File.Handle) error{Unexpected}!Winsize {
-    // NOTE: Even though the event comes with a size, it may not be accurate. We ask for
-    // the size directly when we get this event
     var console_info: winconsole.CONSOLE_SCREEN_BUFFER_INFO = undefined;
     if (winconsole.GetConsoleScreenBufferInfo(stdout_handle, &console_info) == 0) {
         return windows.unexpectedError(windows.kernel32.GetLastError());
     }
-    const window_rect = console_info.srWindow;
-    const width = window_rect.Right - window_rect.Left;
-    const height = window_rect.Bottom - window_rect.Top;
 
     return Winsize{
-        .cols = @intCast(width),
-        .rows = @intCast(height),
+        .cols = @intCast(console_info.dwSize.X),
+        .rows = @intCast(console_info.dwSize.Y),
         .x_pixel = 0,
         .y_pixel = 0,
     };
