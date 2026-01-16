@@ -684,7 +684,7 @@ test "parse(APC): Kitty Graphics Protocol" {
 
     {
         var caps = TerminalCapabilities{};
-        const input = ctlseqs.APC ++ "Gi=1;ENOTSUPPORTED" ++ ctlseqs.ST;
+        const input = ctlseqs.APC ++ "Gi=1;ENOTSUPPORTED:Kitty Graphics Protocol is not support in version ..." ++ ctlseqs.ST;
         const result = parse(input, &caps);
         const expected: ParseResult = .consume(input.len);
 
