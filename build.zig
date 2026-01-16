@@ -95,21 +95,22 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_common_tests.step);
     test_step.dependOn(&run_tty_tests.step);
-    
-    const simple_example_exe = b.addExecutable(.{
-        .name = "simple_example",
-        .root_module = b.createModule(.{
-            .target = target,
-            .optimize = optimize,
 
-            .root_source_file = b.path("examples/simple.zig"),
+    if (b.option(bool, "examples", "build examples") orelse false) {
+        const simple_example_exe = b.addExecutable(.{
+            .name = "simple_example",
+            .root_module = b.createModule(.{
+                .target = target,
+                .optimize = optimize,
 
-            .imports = &.{
-                .{ .name = "zttio", .module = zttio_mod },
-            },
-        }),
-    });
-    
-    const examples_step = b.step("examples", "build examples");
-    examples_step.dependOn(&simple_example_exe.step);
+                .root_source_file = b.path("examples/simple.zig"),
+
+                .imports = &.{
+                    .{ .name = "zttio", .module = zttio_mod },
+                },
+            }),
+        });
+
+        b.installArtifact(simple_example_exe);
+    }
 }

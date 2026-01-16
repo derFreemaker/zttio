@@ -55,7 +55,7 @@ pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, st
     ptr.stdout_writer = stdout.writer(@constCast(ptr.stdout_writer_buf));
     ptr.stdout = &ptr.stdout_writer.interface;
 
-    ptr.reader = try .init(ptr.allocator, event_allocator, stdin.handle, stdout.handle);
+    ptr.reader = try .init(ptr.allocator, event_allocator, stdin.handle, stdout.handle, &ptr.winsize);
     errdefer ptr.reader.deinit(ptr.allocator);
 
     ptr.opts = opts;

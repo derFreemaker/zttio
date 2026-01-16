@@ -42,13 +42,13 @@ pub fn main() !u8 {
 
     try tty.flush();
 
-    var pos_row: u16 = 4;
+    var pos_row: u16 = 5;
     while (true) {
         var event = tty.nextEvent();
         defer event.deinit(event_allocator);
 
-        try tty.clearLine(.entire);
         try tty.moveCursor(.{ .pos = .{ .row = pos_row } });
+        try tty.clearLine(.entire);
         try tty.stdout.print("{any}", .{event});
 
         switch (event) {
@@ -56,7 +56,7 @@ pub fn main() !u8 {
                 if (key.matches('c', .{ .ctrl = true })) {
                     break;
                 } else if (key.matches(zttio.Key.up, .{})) {
-                    pos_row = @max(4, pos_row - 1);
+                    pos_row = @max(5, pos_row - 1);
 
                     try tty.clearLine(.entire);
                     try tty.moveCursor(.{ .pos = .{ .row = pos_row } });
@@ -68,6 +68,11 @@ pub fn main() !u8 {
                     try tty.moveCursor(.{ .pos = .{ .row = pos_row } });
                     try tty.stdout.print("{any}", .{event});
                 }
+            },
+            .winsize => |winsize| {
+                try tty.moveCursor(.{ .pos = .{ .row = 3 } });
+                try tty.clearLine(.entire);
+                try tty.stdout.print("{any}", .{winsize});
             },
             else => {},
         }

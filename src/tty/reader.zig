@@ -18,8 +18,8 @@ const Reader = @This();
 allocator: std.mem.Allocator,
 event_allocator: std.mem.Allocator,
 
-in_paste: bool = false,
 paste_buf: std.ArrayList(u8),
+in_paste: bool = false,
 
 internal: InternalReader,
 parser: Parser,
@@ -34,7 +34,9 @@ break_state: uucode.grapheme.BreakState = .default,
 
 queue: Queue(Event, 512),
 
-pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, stdin: std.fs.File.Handle, stdout: std.fs.File.Handle) error{ OutOfMemory }!Reader {
+winsize: *Winsize,
+
+pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, stdin: std.fs.File.Handle, stdout: std.fs.File.Handle, winsize: *Winsize) error{OutOfMemory}!Reader {
     return Reader{
         .allocator = allocator,
         .event_allocator = event_allocator,
@@ -47,6 +49,8 @@ pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, st
         .buf = .empty,
 
         .queue = try .init(allocator),
+
+        .winsize = winsize,
     };
 }
 
@@ -54,7 +58,7 @@ pub fn deinit(self: *Reader, allocator: std.mem.Allocator) void {
     self.stop();
 
     self.parser.deinit();
-    
+
     self.paste_buf.deinit(self.allocator);
     self.buf.deinit(self.allocator);
 
@@ -77,12 +81,16 @@ pub fn stop(self: *Reader) void {
     const thread = self.thread orelse return;
     self.should_quit = true;
     thread.join();
-    
+
     self.thread = null;
     self.should_quit = false;
 }
 
 pub fn postEvent(self: *Reader, event: Event) void {
+    if (event == .winsize) {
+        self.winsize.* = event.winsize;
+    }
+
     return self.queue.push(event);
 }
 
@@ -92,7 +100,7 @@ pub fn nextEvent(self: *Reader) Event {
 
 fn runReader(self: *Reader) !void {
     if (builtin.is_test) return;
-    
+
     while (!self.should_quit) {
         const may_read_result = try self.internal.next(self.event_allocator);
         const read_result = may_read_result orelse {
