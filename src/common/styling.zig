@@ -101,7 +101,7 @@ pub const Thickness = enum(u2) {
     dim = 2,
 };
 
-pub const Attributes = struct {
+pub const Attributes = packed struct {
     pub const italic_reset = CSI ++ "23m";
     pub const blink_reset = CSI ++ "25m";
 
@@ -115,7 +115,7 @@ pub const Attributes = struct {
     reverse: bool = false, // 7,
     hidden: bool = false, // 8
     strikethrough: bool = false, // 9
-
+    
     pub fn printAsArg(self: Attributes, buf: []u8) []const u8 {
         std.debug.assert(buf.len >= 9);
 
