@@ -3,7 +3,7 @@ const std = @import("std");
 const Key = @import("key.zig");
 const Mouse = @import("mouse.zig");
 const Color = @import("color.zig").Color;
-const Winsize = @import("winsize.zig");
+const Winsize = @import("winsize.zig").Winsize;
 const MultiCursor = @import("multi_cursor.zig");
 const KittyGraphics = @import("graphics/kitty_graphics.zig");
 

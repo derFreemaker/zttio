@@ -20,4 +20,4 @@ pub const Color = @import("color.zig").Color;
 pub const Event = @import("event.zig").Event;
 pub const Key = @import("key.zig");
 pub const Mouse = @import("mouse.zig");
-pub const Winsize = @import("winsize.zig");
+pub const Winsize = @import("winsize.zig").Winsize;

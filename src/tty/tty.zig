@@ -98,7 +98,7 @@ pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, st
         },
     }
 
-    ptr.winsize = Reader.InternalReader.getWinsize(stdout.handle) catch return error.UnableToGetWinsize;
+    _ = try ptr.updateWinsize();
 
     return ptr;
 }
@@ -303,7 +303,7 @@ pub fn moveCursor(self: *Tty, move_cursor: MoveCursor) std.Io.Writer.Error!void 
             return self.moveCursor(.{ .column = 0 });
         },
         .end => {
-            return self.moveCursor(.{ .column = self.winsize.cols });
+            return self.moveCursor(.{ .column = self.getWinsize().cols });
         },
     }
 }
