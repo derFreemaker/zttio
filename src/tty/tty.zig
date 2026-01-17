@@ -30,7 +30,7 @@ stdout_writer: std.fs.File.Writer,
 stdout: *std.Io.Writer,
 
 reader: Reader,
-winsize: Winsize,
+winsize: std.atomic.Value(Winsize),
 
 opts: Options,
 caps: TerminalCapabilities,
@@ -143,9 +143,14 @@ pub inline fn strWidth(self: *Tty, str: []const u8) usize {
     return common.gwidth.gwidth(str, self.caps.unicode_width_method);
 }
 
-pub inline fn updateWinsize(self: *Tty) error{UnableToGetWinsize}!Winsize {
-    self.winsize = Reader.InternalReader.getWinsize(self.stdout_handle) catch return error.UnableToGetWinsize;
-    return self.winsize;
+pub inline fn getWinsize(self: *const Tty) Winsize {
+    return self.winsize.load(.acquire);
+}
+
+pub fn updateWinsize(self: *Tty) error{UnableToGetWinsize}!Winsize {
+    const winsize = Reader.InternalReader.getWinsize(self.stdout_handle) catch return error.UnableToGetWinsize;
+    self.winsize.store(winsize, .release);
+    return winsize;
 }
 
 pub inline fn nextEvent(self: *Tty) Event {

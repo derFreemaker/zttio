@@ -34,9 +34,9 @@ break_state: uucode.grapheme.BreakState = .default,
 
 queue: Queue(Event, 512),
 
-winsize: *Winsize,
+winsize: *std.atomic.Value(Winsize),
 
-pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, stdin: std.fs.File.Handle, stdout: std.fs.File.Handle, winsize: *Winsize) error{OutOfMemory}!Reader {
+pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, stdin: std.fs.File.Handle, stdout: std.fs.File.Handle, winsize: *std.atomic.Value(Winsize)) error{OutOfMemory}!Reader {
     return Reader{
         .allocator = allocator,
         .event_allocator = event_allocator,
@@ -88,7 +88,7 @@ pub fn stop(self: *Reader) void {
 
 pub fn postEvent(self: *Reader, event: Event) void {
     if (event == .winsize) {
-        self.winsize.* = event.winsize;
+        self.winsize.store(event.winsize, .release);
     }
 
     return self.queue.push(event);
