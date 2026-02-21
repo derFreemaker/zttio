@@ -194,8 +194,8 @@ pub const Terminal = struct {
     // keyboard handling
     pub const kitty_keyboard_handling_reset = CSI ++ "<u";
     pub const kitty_keyboard_handling_set_x = CSI ++ ">{d}u";
-    pub fn setKittyKeyboardHandling(writer: *std.Io.Writer, detail: Terminal.KittyKeyboardFlags) std.Io.Writer.Error!void {
-        const flag_int: u5 = @bitCast(detail);
+    pub fn setKittyKeyboardHandling(writer: *std.Io.Writer, flags: Terminal.KittyKeyboardFlags) std.Io.Writer.Error!void {
+        const flag_int: u5 = @bitCast(flags);
         return writer.print(kitty_keyboard_handling_set_x, .{flag_int});
     }
     pub const KittyKeyboardFlags = packed struct(u5) {

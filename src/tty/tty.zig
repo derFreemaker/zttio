@@ -21,7 +21,6 @@ stdin_handle: std.fs.File.Handle,
 stdout_handle: std.fs.File.Handle,
 raw_mode: RawMode,
 
-arena: std.heap.ArenaAllocator,
 allocator: std.mem.Allocator,
 event_allocator: std.mem.Allocator,
 
@@ -46,8 +45,7 @@ pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, st
     ptr.stdout_handle = stdout.handle;
     ptr.raw_mode = raw_mode;
 
-    ptr.arena = .init(allocator);
-    ptr.allocator = ptr.arena.allocator();
+    ptr.allocator = allocator;
     ptr.event_allocator = event_allocator;
 
     ptr.stdout_writer_buf = try ptr.allocator.alloc(u8, 32 * 1024);
@@ -118,9 +116,7 @@ pub fn deinit(self: *Tty) void {
     self.revertTerminal();
     self.allocator.free(self.stdout_writer_buf);
 
-    const allocator = self.arena.child_allocator;
-    self.arena.deinit();
-    allocator.destroy(self);
+    self.allocator.destroy(self);
 }
 
 /// Makes tty basically useless and probably crashes reader thread.

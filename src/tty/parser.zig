@@ -36,7 +36,7 @@ pub fn parse(self: *Parser, input: []const u8) !ParseResult {
     std.debug.assert(input.len > 0);
 
     // clear any used memory from previous ParseResult
-    _ = self.arena.reset(.retain_capacity);
+    _ = self.arena.reset(.{ .retain_with_limit = 5 * 1024 });
 
     // We gate this for len > 1 so we can detect singular escape key presses
     if (input[0] == 0x1b and input.len > 1) {
