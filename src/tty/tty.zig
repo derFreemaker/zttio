@@ -201,6 +201,9 @@ pub fn clearScreen(self: *Tty, mode: ClearScreenMode) std.Io.Writer.Error!void {
             try self.clearScrollback();
             return self.stdout.writeAll(ctlseqs.Erase.visible_screen);
         },
+        .visible => {
+            return self.stdout.writeAll(ctlseqs.Erase.visible_screen);
+        },
         .before_cursor => {
             return self.stdout.writeAll(ctlseqs.Erase.screen_begin_to_cursor);
         },
@@ -211,6 +214,7 @@ pub fn clearScreen(self: *Tty, mode: ClearScreenMode) std.Io.Writer.Error!void {
 }
 pub const ClearScreenMode = enum {
     entire,
+    visible,
     before_cursor,
     after_cursor,
 };
