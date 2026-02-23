@@ -56,7 +56,9 @@ pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, st
     ptr.reader = try .init(ptr.allocator, event_allocator, stdin.handle, stdout.handle, &ptr.winsize);
     errdefer ptr.reader.deinit(ptr.allocator);
 
-    ptr.opts = opts;
+    ptr.opts = .{
+        .kitty_keyboard_flags = opts.kitty_keyboard_flags,
+    };
     ptr.caps = opts.caps orelse common.TerminalCapabilities.query(stdin, stdout, 5 * std.time.ms_per_s) catch return error.UnableToQueryTerminalCapabilities;
 
     ptr.reader.start() catch |err| switch (err) {
