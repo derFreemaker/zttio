@@ -34,7 +34,7 @@ winsize: std.atomic.Value(Winsize),
 opts: Options,
 caps: TerminalCapabilities,
 
-pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, stdin: std.fs.File, stdout: std.fs.File, caps: ?TerminalCapabilities, opts: Options) error{ OutOfMemory, WriteFailed, NoTty, UnableToEnterRawMode, UnableToQueryTerminalCapabilities, UnableToGetWinsize, UnableToStartReader }!*Tty {
+pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, stdin: std.fs.File, stdout: std.fs.File, opts: CreateOptions) error{ OutOfMemory, WriteFailed, NoTty, UnableToEnterRawMode, UnableToQueryTerminalCapabilities, UnableToGetWinsize, UnableToStartReader }!*Tty {
     if (!stdin.isTty()) return error.NoTty;
     const raw_mode = RawMode.enable(stdin.handle, stdout.handle) catch return error.UnableToEnterRawMode;
 
@@ -57,7 +57,7 @@ pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, st
     errdefer ptr.reader.deinit(ptr.allocator);
 
     ptr.opts = opts;
-    ptr.caps = caps orelse common.TerminalCapabilities.query(stdin, stdout, 5 * std.time.ms_per_s) catch return error.UnableToQueryTerminalCapabilities;
+    ptr.caps = opts.caps orelse common.TerminalCapabilities.query(stdin, stdout, 5 * std.time.ms_per_s) catch return error.UnableToQueryTerminalCapabilities;
 
     ptr.reader.start() catch |err| switch (err) {
         error.OutOfMemory => return error.OutOfMemory,
@@ -487,6 +487,11 @@ pub fn composeAnimationKitty(self: *Tty, opts: KittyGraphics.ComposeAnimationOpt
 }
 
 pub const Options = struct {
+    kitty_keyboard_flags: ctlseqs.Terminal.KittyKeyboardFlags = .default,
+};
+
+pub const CreateOptions = struct {
+    caps: ?TerminalCapabilities = null,
     kitty_keyboard_flags: ctlseqs.Terminal.KittyKeyboardFlags = .default,
 };
 
