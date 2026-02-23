@@ -1,6 +1,6 @@
 .{
     .name = .zttio,
-    .version = "0.2.0",
+    .version = "0.3.0",
     .fingerprint = 0xabd754137085977b, // Changing this has security and trust implications.
     .minimum_zig_version = "0.15.2",
     .dependencies = .{
