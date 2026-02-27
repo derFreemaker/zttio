@@ -330,10 +330,9 @@ inline fn translateMods(mods: u32) Key.Modifiers {
 
 fn peekEvent(self: *WinReader) error{ReadFailed}!?winconsole.INPUT_RECORD {
     if (self.events_pos >= self.events_count) {
-        self.readNextEvents() catch |err| switch (err) {
+        if (!(self.readNextEvents() catch |err| switch (err) {
             error.Unexpected => return error.ReadFailed,
-        };
-        if (self.events_count == 0) {
+        })) {
             return null;
         }
     }
@@ -350,7 +349,7 @@ inline fn remainingEvents(self: *const WinReader) usize {
     return self.events_count - self.events_pos;
 }
 
-fn readNextEvents(self: *WinReader) error{Unexpected}!void {
+fn readNextEvents(self: *WinReader) error{Unexpected}!bool {
     self.events_count = 0;
     self.events_pos = 0;
 
@@ -359,7 +358,7 @@ fn readNextEvents(self: *WinReader) error{Unexpected}!void {
         return windows.unexpectedError(windows.kernel32.GetLastError());
     }
     if (numEvents == 0) {
-        return;
+        return false;
     }
     const events_to_read = @min(numEvents, 32);
 
@@ -367,4 +366,10 @@ fn readNextEvents(self: *WinReader) error{Unexpected}!void {
         return windows.unexpectedError(windows.kernel32.GetLastError());
     }
     self.events_count = numEvents;
+
+    return true;
+}
+
+pub fn waitForStdinData(self: *const WinReader) void {
+    _ = windows.WaitForSingleObject(self.stdin, 20) catch {};
 }

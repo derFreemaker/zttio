@@ -26,7 +26,7 @@ pub fn main() !u8 {
     const stdin: std.fs.File = .stdin();
     const stdout: std.fs.File = .stdout();
 
-    var tty = try zttio.Tty.init(allocator, event_allocator, stdin, stdout, null, .{});
+    var tty = try zttio.Tty.init(allocator, event_allocator, stdin, stdout, .{});
     global_tty = tty;
     defer {
         global_tty = null;

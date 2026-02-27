@@ -108,6 +108,7 @@ fn runReader(self: *Reader) !void {
                 try self.parseBuf(.no_remaining);
             }
 
+            self.internal.waitForStdinData();
             continue;
         };
 
@@ -125,7 +126,9 @@ fn runReader(self: *Reader) !void {
                         }
                     },
                     .key_release => {
-                        // this causes an issue if a key is held before entering paste
+                        // This causes an issue if a key is held before entering paste
+                        // and somehow released inside the paste.
+                        // Should be very unlikly though.
                         if (self.in_paste) {
                             continue;
                         }
@@ -164,7 +167,7 @@ fn parseBuf(self: *Reader, token_remaining: RemainingToken) !void {
 
     const result = try self.parser.parse(self.buf.items);
     defer {
-        if (result.n > 0) {
+        if (result.parse != .none and result.n > 0) {
             @memmove(self.buf.items[0 .. self.buf.items.len - result.n], self.buf.items[result.n..]);
             self.buf.items.len -= result.n;
 
@@ -181,8 +184,7 @@ fn parseBuf(self: *Reader, token_remaining: RemainingToken) !void {
     }
 
     switch (result.parse) {
-        .none => return,
-        .skip => {},
+        .none, .skip => {},
         .event => |event| {
             self.postEvent(try event.clone(self.event_allocator));
         },

@@ -60,3 +60,15 @@ pub fn getWinsize(fd: posix.fd_t) !Winsize {
         };
     return error.IoctlError;
 }
+
+pub fn waitForStdinData(self: *const PosixReader) void {
+    var pollfds = [_]std.posix.pollfd{
+        std.posix.pollfd{
+            .fd = self.stdin_fd,
+            .events = 1,
+            .revents = 0,
+        },
+    };
+
+    _ = std.posix.poll(&pollfds, 20) catch {};
+}
