@@ -15,7 +15,7 @@ underline: ?Underline = null,
 thickness: ?Thickness = null,
 attrs: ?Attributes = null,
 
-pub fn print(self: Styling, writer: *std.Io.Writer) !void {
+pub fn print(self: *const Styling, writer: *std.Io.Writer) !void {
     try writer.writeAll(CSI);
     var sep = ListSeparator.init(";");
 
@@ -27,10 +27,10 @@ pub fn print(self: Styling, writer: *std.Io.Writer) !void {
 
     if (self.thickness) |thickness| {
         try sep.print(writer);
-        
+
         try writer.print("{d}", .{@intFromEnum(thickness)});
     }
-    
+
     if (self.attrs) |attrs| {
         try sep.print(writer);
 
@@ -53,7 +53,7 @@ pub fn print(self: Styling, writer: *std.Io.Writer) !void {
     }
 
     try writer.writeByte('m');
-    
+
     if (self.underline) |underline| {
         // we print a underline so that terminals which do not support
         // colored/styled underlines at least show an underline
@@ -115,7 +115,7 @@ pub const Attributes = packed struct {
     reverse: bool = false, // 7,
     hidden: bool = false, // 8
     strikethrough: bool = false, // 9
-    
+
     pub fn printAsArg(self: Attributes, buf: []u8) []const u8 {
         std.debug.assert(buf.len >= 9);
 

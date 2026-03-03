@@ -331,8 +331,8 @@ pub const MoveCursor = union(enum) {
     };
 };
 
-pub fn setStyling(self: *Tty, style: ctlseqs.Styling) std.Io.Writer.Error!void {
-    return self.stdout.print("{f}", .{style});
+pub fn setStyling(self: *Tty, style: *const ctlseqs.Styling) std.Io.Writer.Error!void {
+    return style.print(self.stdout);
 }
 
 pub fn clearLine(self: *Tty, mode: ClearLineMode) std.Io.Writer.Error!void {

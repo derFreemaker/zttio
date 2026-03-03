@@ -58,11 +58,19 @@ pub fn main() !u8 {
                 } else if (key.matches(zttio.Key.up, .{})) {
                     pos_row = @max(5, pos_row - 1);
 
+                    try tty.setStyling(&zttio.Styling{
+                        .background = .{ .c8 = .blue },
+                    });
+
                     try tty.clearLine(.entire);
                     try tty.moveCursor(.{ .pos = .{ .row = pos_row } });
                     try tty.stdout.print("{any}", .{event});
                 } else if (key.matches(zttio.Key.down, .{})) {
                     pos_row = @min(20, pos_row + 1);
+
+                    try tty.setStyling(&zttio.Styling{
+                        .background = .{ .c8 = .magenta },
+                    });
 
                     try tty.clearLine(.entire);
                     try tty.moveCursor(.{ .pos = .{ .row = pos_row } });
