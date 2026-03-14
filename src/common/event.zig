@@ -31,10 +31,8 @@ pub const Event = union(enum) {
 
     pub fn deinit(event: *Event, allocator: std.mem.Allocator) void {
         switch (event.*) {
-            .key_press, .key_release => |key| {
-                if (key.text) |text| {
-                    allocator.free(text);
-                }
+            .key_press, .key_release => |*key| {
+                key.text.deinit(allocator);
             },
 
             .paste => |p| {

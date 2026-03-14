@@ -8,7 +8,7 @@ codepoint: u21,
 
 /// The text generated from the key event.
 /// If set has to be freed with given `event_allocator`.
-text: ?[]const u8 = null,
+text: KeyText = .empty,
 
 /// The shifted codepoint of this key event. This will only be present if the
 /// Shift modifier was used to generate the event
@@ -87,7 +87,7 @@ pub fn matchShiftedCodepoint(self: Key, cp: u21, mods: Modifiers) bool {
 ///
 /// ignored modifiers: caps_lock, num_lock
 pub fn matchText(self: Key, cp: u21, mods: Modifiers) bool {
-    if (self.text == null) return false;
+    if (self.text == .empty) return false;
 
     var self_mods = self.mods;
     self_mods.caps_lock = false;
@@ -108,7 +108,7 @@ pub fn matchText(self: Key, cp: u21, mods: Modifiers) bool {
 
     var buf: [4]u8 = undefined;
     const n = std.unicode.utf8Encode(_cp, &buf) catch return false;
-    return std.mem.eql(u8, self.text.?, buf[0..n]) and self_mods.eql(arg_mods);
+    return std.mem.eql(u8, self.text.get(), buf[0..n]) and self_mods.eql(arg_mods);
 }
 
 /// The key must exactly match the codepoint and modifiers.
@@ -140,6 +140,56 @@ pub fn isModifier(self: Key) bool {
         self.codepoint == right_hyper or
         self.codepoint == right_control or
         self.codepoint == right_meta;
+}
+
+pub const KeyText = union(enum) {
+    pub const MaxShortLength = 23;
+
+    empty: void,
+    char: u8,
+    short: [MaxShortLength]u8,
+    long: []const u8,
+
+    pub fn from(text: []const u8) KeyText {
+        if (text.len == 1) {
+            return KeyText{ .char = text[0] };
+        } else if (text.len <= MaxShortLength) {
+            var key_text = KeyText{ .short = std.mem.zeroes([MaxShortLength]u8) };
+            @memcpy(key_text.short[0..text.len], text);
+            return key_text;
+        } else {
+            return KeyText{ .long = text };
+        }
+    }
+
+    pub fn deinit(self: *KeyText, allocator: std.mem.Allocator) void {
+        switch (self.*) {
+            .empty, .char, .short => {},
+            .long => allocator.free(self.long),
+        }
+    }
+
+    pub fn get(self: *const KeyText) []const u8 {
+        return switch (self.*) {
+            .empty => &[_]u8{},
+            .char => (&self.char)[0..1],
+            .short => self.short[0 .. std.mem.indexOfScalar(u8, &self.short, 0) orelse MaxShortLength],
+            .long => self.long,
+        };
+    }
+
+    pub fn len(self: *const KeyText) usize {
+        return switch (self.*) {
+            .empty => 0,
+            .char => 1,
+            .short => std.mem.indexOfScalar(u8, &self.short, 0) orelse MaxShortLength,
+            .long => self.long.len,
+        };
+    }
+};
+
+comptime {
+    std.debug.assert(@sizeOf(KeyText) == 24);
 }
 
 pub const Modifiers = packed struct(u8) {
@@ -412,7 +462,7 @@ test "matches 'a'" {
     const key: Key = .{
         .codepoint = 'a',
         .mods = .{ .num_lock = true },
-        .text = "a",
+        .text = .from("a"),
     };
     try testing.expect(key.matches('a', .{}));
     try testing.expect(!key.matches('a', .{ .shift = true }));
@@ -423,7 +473,7 @@ test "matches 'shift+a'" {
         .codepoint = 'a',
         .shifted_codepoint = 'A',
         .mods = .{ .shift = true },
-        .text = "A",
+        .text = .from("A"),
     };
     try testing.expect(key.matches('a', .{ .shift = true }));
     try testing.expect(!key.matches('a', .{}));
@@ -445,7 +495,7 @@ test "matches 'shift+;'" {
         .codepoint = ';',
         .shifted_codepoint = ':',
         .mods = .{ .shift = true },
-        .text = ":",
+        .text = .from(":"),
     };
     try testing.expect(key.matches(';', .{ .shift = true }));
     try testing.expect(key.matches(':', .{}));
@@ -464,12 +514,12 @@ test "name_map" {
 test "upper mapping" {
     const small_greek_letter = 0x03C2;
     const capital_greek_letter = 0x03A3;
-    
+
     const key = Key{
         .codepoint = small_greek_letter,
         .shifted_codepoint = capital_greek_letter,
         .mods = .{ .shift = true },
-        .text = "\u{03A3}",
+        .text = .from("\u{03A3}"),
     };
     try testing.expect(key.matchText(small_greek_letter, .{ .shift = true }));
 }

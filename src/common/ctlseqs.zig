@@ -150,10 +150,6 @@ pub const Hyperlink = struct {
 };
 
 pub const Terminal = struct {
-    // mouse. We try for button motion and any motion. terminals will enable the
-    // last one we tried (any motion). This was added because zellij doesn't
-    // support any motion currently
-    // See: https://github.com/zellij-org/zellij/issues/1679
     pub const mouse_set = CSI ++ "?1002;1003;1004;1006h";
     pub const mouse_set_pixels = CSI ++ "?1002;1003;1004;1016h";
     pub const mouse_reset = CSI ++ "?1002;1003;1004;1006;1016l";

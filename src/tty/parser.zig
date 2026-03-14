@@ -115,7 +115,10 @@ fn parseNormal(input: []const u8) !ParseResult {
                 }
             }
 
-            break :blk .{ .codepoint = code, .text = input[0..n] };
+            break :blk Key{
+                .codepoint = code,
+                .text = .from(input[0..n]),
+            };
         },
     };
 
@@ -321,7 +324,7 @@ fn parseCsi(self: *Parser, input: []const u8) error{OutOfMemory}!ParseResult {
                     const cp_text_buf = try text_buf.addManyAsSlice(self.arena.allocator(), cp_utf8_len);
                     total += std.unicode.utf8Encode(cp, cp_text_buf) catch return skip;
                 }
-                key.text = text_buf.items;
+                key.text = .from(text_buf.items);
             }
 
             const event: Event = if (is_release) .{ .key_release = key } else .{ .key_press = key };
@@ -390,7 +393,7 @@ fn parseCsi(self: *Parser, input: []const u8) error{OutOfMemory}!ParseResult {
                     const cp_text_buf = try text_buf.addManyAsSlice(self.arena.allocator(), cp_utf8_len);
                     total += std.unicode.utf8Encode(cp, cp_text_buf) catch return skip;
                 }
-                key.text = text_buf.items;
+                key.text = .from(text_buf.items);
             }
 
             const event: Event = if (is_release) .{ .key_release = key } else .{ .key_press = key };
@@ -511,7 +514,7 @@ fn parseCsi(self: *Parser, input: []const u8) error{OutOfMemory}!ParseResult {
                     const cp_text_buf = try text_buf.addManyAsSlice(self.arena.allocator(), cp_utf8_len);
                     total += std.unicode.utf8Encode(cp, cp_text_buf) catch return skip;
                 }
-                key.text = text_buf.items;
+                key.text = .from(text_buf.items);
             }
 
             {
@@ -523,7 +526,7 @@ fn parseCsi(self: *Parser, input: []const u8) error{OutOfMemory}!ParseResult {
                     .caps_lock = key.mods.caps_lock,
                     .num_lock = key.mods.num_lock,
                 };
-                if (key.text == null and
+                if (key.text == .empty and
                     key.mods.eql(mod_test) and
                     key.codepoint <= std.math.maxInt(u8) and
                     std.ascii.isPrint(@intCast(key.codepoint)))
@@ -533,7 +536,7 @@ fn parseCsi(self: *Parser, input: []const u8) error{OutOfMemory}!ParseResult {
                     const text_buf = try self.arena.allocator().alloc(u8, std.unicode.utf8CodepointSequenceLength(upper) catch unreachable);
                     _ = std.unicode.utf8Encode(upper, text_buf) catch unreachable;
 
-                    key.text = text_buf;
+                    key.text = .from(text_buf);
                     key.shifted_codepoint = upper;
                 }
             }
@@ -806,7 +809,7 @@ test "parse(NORMAL): single keypress" {
     const result = try parser.parse(input);
     const expected_key: Key = .{
         .codepoint = 'a',
-        .text = "a",
+        .text = .from("a"),
     };
     const expected_event: Event = .{ .key_press = expected_key };
 
@@ -838,12 +841,12 @@ test "parse(NORMAL): single keypress with more buffer" {
     const result = try parser.parse(input);
     const expected_key: Key = .{
         .codepoint = 'a',
-        .text = "a",
+        .text = .from("a"),
     };
     const expected_event: Event = .{ .key_press = expected_key };
 
     try testing.expectEqual(1, result.n);
-    try testing.expectEqualStrings(expected_key.text.?, result.parse.event.key_press.text.?);
+    try testing.expectEqualStrings(expected_key.text.get(), result.parse.event.key_press.text.get());
     try testing.expectEqualDeep(expected_event, result.parse.event);
 }
 
@@ -898,7 +901,7 @@ test "parse(NORMAL): single codepoint" {
     const result = try parser.parse(input);
     const expected_key: Key = .{
         .codepoint = 0x1F642,
-        .text = input,
+        .text = .from(input),
     };
     const expected_event: Event = .{ .key_press = expected_key };
 
@@ -915,7 +918,7 @@ test "parse(NORMAL): single codepoint with more in buffer" {
     const result = try parser.parse(input);
     const expected_key: Key = .{
         .codepoint = 0x1F642,
-        .text = "🙂",
+        .text = .from("🙂"),
     };
     const expected_event: Event = .{ .key_press = expected_key };
 
@@ -932,7 +935,7 @@ test "parse(NORMAL): multiple codepoint grapheme" {
     const result = try parser.parse(input);
     const expected_key: Key = .{
         .codepoint = Key.multicodepoint,
-        .text = input,
+        .text = .from(input),
     };
     const expected_event: Event = .{ .key_press = expected_key };
 
@@ -949,12 +952,12 @@ test "parse(NORMAL): multiple codepoint grapheme with more after" {
     const result = try parser.parse(input);
     const expected_key: Key = .{
         .codepoint = Key.multicodepoint,
-        .text = "👩‍🚀",
+        .text = .from("👩‍🚀"),
     };
 
-    try testing.expectEqual(expected_key.text.?.len, result.n);
+    try testing.expectEqual(expected_key.text.len(), result.n);
     const actual = result.parse.event.key_press;
-    try testing.expectEqualStrings(expected_key.text.?, actual.text.?);
+    try testing.expectEqualStrings(expected_key.text.get(), actual.text.get());
     try testing.expectEqual(expected_key.codepoint, actual.codepoint);
 }
 
@@ -967,7 +970,7 @@ test "parse(NORMAL): flag emoji" {
     const result = try parser.parse(input);
     const expected_key: Key = .{
         .codepoint = Key.multicodepoint,
-        .text = input,
+        .text = .from(input),
     };
     const expected_event: Event = .{ .key_press = expected_key };
 
@@ -985,7 +988,7 @@ test "parse(NORMAL): combining mark" {
     const result = try parser.parse(input);
     const expected_key: Key = .{
         .codepoint = Key.multicodepoint,
-        .text = input,
+        .text = .from(input),
     };
     const expected_event: Event = .{ .key_press = expected_key };
 
@@ -1002,7 +1005,7 @@ test "parse(NORMAL): skin tone emoji" {
     const result = try parser.parse(input);
     const expected_key: Key = .{
         .codepoint = Key.multicodepoint,
-        .text = input,
+        .text = .from(input),
     };
     const expected_event: Event = .{ .key_press = expected_key };
 
@@ -1020,7 +1023,7 @@ test "parse(NORMAL): text variation selector" {
     const result = try parser.parse(input);
     const expected_key: Key = .{
         .codepoint = Key.multicodepoint,
-        .text = input,
+        .text = .from(input),
     };
     const expected_event: Event = .{ .key_press = expected_key };
 
@@ -1037,7 +1040,7 @@ test "parse(NORMAL): keycap sequence" {
     const result = try parser.parse(input);
     const expected_key: Key = .{
         .codepoint = Key.multicodepoint,
-        .text = input,
+        .text = .from(input),
     };
     const expected_event: Event = .{ .key_press = expected_key };
 
@@ -1111,7 +1114,7 @@ test "parse(CSI): disambiguate shift + space" {
         .codepoint = ' ',
         .shifted_codepoint = ' ',
         .mods = .{ .shift = true },
-        .text = " ",
+        .text = .from(" "),
     };
     const expected_event: Event = .{ .key_press = expected_key };
 
@@ -1316,7 +1319,7 @@ test "parse(CSI): kitty: shift+a with text reporting" {
         .codepoint = 'a',
         .shifted_codepoint = 'A',
         .mods = .{ .shift = true },
-        .text = "å",
+        .text = .from("å"),
     };
     const expected_event: Event = .{ .key_press = expected_key };
 
@@ -1335,7 +1338,7 @@ test "parse(CSI): kitty: shift+a without text reporting" {
         .codepoint = 'a',
         .shifted_codepoint = 'A',
         .mods = .{ .shift = true },
-        .text = "A",
+        .text = .from("A"),
     };
     const expected_event: Event = .{ .key_press = expected_key };
 
