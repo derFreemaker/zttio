@@ -43,7 +43,7 @@ pub fn getWinsize(stdout_handle: std.fs.File.Handle) error{Unexpected}!Winsize {
     };
 }
 
-pub fn next(self: *WinReader, event_allocator: std.mem.Allocator) error{ OutOfMemory, ReadFailed, EOF }!?ReadResult {
+pub fn next(self: *WinReader) error{ ReadFailed, EOF }!?ReadResult {
     var utf16_buf: [2]u16 = undefined;
     var utf16_half: bool = false;
 
@@ -187,14 +187,13 @@ pub fn next(self: *WinReader, event_allocator: std.mem.Allocator) error{ OutOfMe
                 }
 
                 var codepoint: u21 = base_layout;
-                var text: ?[]const u8 = null;
+                var text: [4]u8 = std.mem.zeroes([4]u8);
+                var len: u3 = 0;
                 switch (event.uChar.UnicodeChar) {
                     0x00...0x1F => {},
                     else => |cp| {
                         codepoint = cp;
-                        const buf = try event_allocator.alloc(u8, std.unicode.utf8CodepointSequenceLength(codepoint) catch unreachable);
-                        _ = std.unicode.utf8Encode(codepoint, buf) catch unreachable;
-                        text = buf;
+                        len = std.unicode.utf8Encode(codepoint, &text) catch unreachable;
                     },
                 }
 
@@ -202,7 +201,7 @@ pub fn next(self: *WinReader, event_allocator: std.mem.Allocator) error{ OutOfMe
                     .codepoint = codepoint,
                     .base_layout_codepoint = base_layout,
                     .mods = translateMods(event.dwControlKeyState),
-                    .text = text,
+                    .text = .from(text[0..len]),
                 };
 
                 switch (event.bKeyDown) {

@@ -169,6 +169,13 @@ pub const KeyText = union(enum) {
         }
     }
 
+    pub fn clone(self: *const KeyText, allocator: std.mem.Allocator) std.mem.Allocator.Error!KeyText {
+        return switch (self.*) {
+            .empty, .char, .short => self.*,
+            .long => KeyText{ .long = try allocator.dupe(u8, self.long) },
+        };
+    }
+
     pub fn get(self: *const KeyText) []const u8 {
         return switch (self.*) {
             .empty => &[_]u8{},

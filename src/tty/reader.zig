@@ -102,7 +102,7 @@ fn runReader(self: *Reader) !void {
     if (builtin.is_test) return;
 
     while (!self.should_quit) {
-        const may_read_result = try self.internal.next(self.event_allocator);
+        const may_read_result = try self.internal.next();
         const read_result = may_read_result orelse {
             if (self.buf.items.len > 0) {
                 try self.parseBuf(.no_remaining);
@@ -116,7 +116,8 @@ fn runReader(self: *Reader) !void {
             .event => |event| {
                 switch (event) {
                     .key_press => |key| {
-                        if (key.text) |text| {
+                        if (key.text != .empty) {
+                            const text = key.text.get();
                             if (self.in_paste) {
                                 try self.paste_buf.appendSlice(self.allocator, text);
                             } else {
