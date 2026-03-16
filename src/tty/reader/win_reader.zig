@@ -198,8 +198,8 @@ pub fn next(self: *WinReader) error{ ReadFailed, EOF }!?ReadResult {
                 }
 
                 const key = Key{
-                    .codepoint = codepoint,
-                    .base_layout_codepoint = base_layout,
+                    .codepoint = .from(codepoint),
+                    .base_layout_codepoint = .from(base_layout),
                     .mods = translateMods(event.dwControlKeyState),
                     .text = .from(text[0..len]),
                 };

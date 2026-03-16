@@ -53,9 +53,9 @@ pub fn main() !u8 {
 
         switch (event) {
             .key_press => |key| {
-                if (key.matches('c', .{ .ctrl = true })) {
+                if (key.matches(.from('c'), .{ .ctrl = true })) {
                     break;
-                } else if (key.matches(zttio.Key.up, .{})) {
+                } else if (key.matches(.up, .{})) {
                     pos_row = @max(5, pos_row - 1);
 
                     try tty.setStyling(&zttio.Styling{
@@ -65,7 +65,7 @@ pub fn main() !u8 {
                     try tty.clearLine(.entire);
                     try tty.moveCursor(.{ .pos = .{ .row = pos_row } });
                     try tty.stdout.print("{any}", .{event});
-                } else if (key.matches(zttio.Key.down, .{})) {
+                } else if (key.matches(.down, .{})) {
                     pos_row = @min(20, pos_row + 1);
 
                     try tty.setStyling(&zttio.Styling{

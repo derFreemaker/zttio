@@ -4,7 +4,7 @@ const uucode = @import("uucode");
 const Key = @This();
 
 /// The unicode codepoint of the key event.
-codepoint: u21,
+codepoint: KeyCP,
 
 /// The text generated from the key event.
 /// If set has to be freed with given `event_allocator`.
@@ -12,11 +12,11 @@ text: KeyText = .empty,
 
 /// The shifted codepoint of this key event. This will only be present if the
 /// Shift modifier was used to generate the event
-shifted_codepoint: ?u21 = null,
+shifted_codepoint: ?KeyCP = null,
 
 /// The key that would have been pressed on a standard keyboard layout. This is
 /// useful for shortcut matching
-base_layout_codepoint: ?u21 = null,
+base_layout_codepoint: ?KeyCP = null,
 
 mods: Modifiers = .{},
 
@@ -32,7 +32,7 @@ mods: Modifiers = .{},
 /// 3. If there is a shifted codepoint and it matches
 ///
 ///    ignored modifiers: shift, caps_lock, num_lock
-pub fn matches(self: Key, cp: u21, mods: Modifiers) bool {
+pub fn matches(self: Key, cp: KeyCP, mods: Modifiers) bool {
     // rule 1
     if (self.matchExact(cp, mods)) return true;
 
@@ -46,7 +46,7 @@ pub fn matches(self: Key, cp: u21, mods: Modifiers) bool {
 }
 
 /// matches against any of the provided codepoints.
-pub fn matchesAny(self: Key, cps: []const u21, mods: Modifiers) bool {
+pub fn matchesAny(self: Key, cps: []const KeyCP, mods: Modifiers) bool {
     for (cps) |cp| {
         if (self.matches(cp, mods)) return true;
     }
@@ -55,7 +55,7 @@ pub fn matchesAny(self: Key, cps: []const u21, mods: Modifiers) bool {
 
 /// matches base layout codes, useful for shortcut matching when an alternate key
 /// layout is used
-pub fn matchShortcut(self: Key, cp: u21, mods: Modifiers) bool {
+pub fn matchShortcut(self: Key, cp: KeyCP, mods: Modifiers) bool {
     if (self.base_layout_codepoint == null) return false;
     return cp == self.base_layout_codepoint.? and self.mods.eql(mods);
 }
@@ -65,7 +65,7 @@ pub fn matchShortcut(self: Key, cp: u21, mods: Modifiers) bool {
 /// semicolon or just colon...or shift + ctrl + ; or just ctrl + :
 ///
 /// ignored modifiers: shift, caps_lock, num_lock
-pub fn matchShiftedCodepoint(self: Key, cp: u21, mods: Modifiers) bool {
+pub fn matchShiftedCodepoint(self: Key, cp: KeyCP, mods: Modifiers) bool {
     if (self.shifted_codepoint == null) return false;
     if (!self.mods.shift) return false;
 
@@ -86,7 +86,7 @@ pub fn matchShiftedCodepoint(self: Key, cp: u21, mods: Modifiers) bool {
 /// text of the key.
 ///
 /// ignored modifiers: caps_lock, num_lock
-pub fn matchText(self: Key, cp: u21, mods: Modifiers) bool {
+pub fn matchText(self: Key, cp: KeyCP, mods: Modifiers) bool {
     if (self.text == .empty) return false;
 
     var self_mods = self.mods;
@@ -98,13 +98,13 @@ pub fn matchText(self: Key, cp: u21, mods: Modifiers) bool {
     arg_mods.num_lock = false;
 
     const _cp: u21 = if (mods.shift or mods.caps_lock) blk: {
-        if (cp < 128) {
-            break :blk std.ascii.toUpper(@intCast(cp));
+        if (cp.value() < 128) {
+            break :blk std.ascii.toUpper(@intCast(cp.value()));
         }
 
         var buf: [1]u21 = undefined;
-        break :blk uucode.get(.uppercase_mapping, cp).with(&buf, cp)[0];
-    } else cp;
+        break :blk uucode.get(.uppercase_mapping, cp.value()).with(&buf, cp.value())[0];
+    } else cp.value();
 
     var buf: [4]u8 = undefined;
     const n = std.unicode.utf8Encode(_cp, &buf) catch return false;
@@ -114,7 +114,7 @@ pub fn matchText(self: Key, cp: u21, mods: Modifiers) bool {
 /// The key must exactly match the codepoint and modifiers.
 ///
 /// ignored modifiers: caps_lock, num_lock
-pub fn matchExact(self: Key, cp: u21, mods: Modifiers) bool {
+pub fn matchExact(self: Key, cp: KeyCP, mods: Modifiers) bool {
     var self_mods = self.mods;
     self_mods.caps_lock = false;
     self_mods.num_lock = false;
@@ -216,126 +216,258 @@ pub const Modifiers = packed struct(u8) {
     }
 };
 
+pub const KeyCP = enum(u21) {
+    // a few special keys that we encode as their actual ascii value
+    tab = 0x09,
+    enter = 0x0D,
+    escape = 0x1B,
+    space = 0x20,
+    backspace = 0x7F,
+
+    /// Multicodepoint is a key which generated text but cannot be expressed as a
+    /// single codepoint. The value is the maximum unicode codepoint + 1
+    multicodepoint = 0x110000 + 1,
+
+    // kitty encodes these keys directly in the private use area. We reuse those
+    // mappings
+    insert = 57348,
+    delete = 57349,
+    left = 57350,
+    right = 57351,
+    up = 57352,
+    down = 57353,
+    page_up = 57354,
+    page_down = 57355,
+    home = 57356,
+    end = 57357,
+    caps_lock = 57358,
+    scroll_lock = 57359,
+    num_lock = 57360,
+    print_screen = 57361,
+    pause = 57362,
+    menu = 57363,
+    f1 = 57364,
+    f2 = 57365,
+    f3 = 57366,
+    f4 = 57367,
+    f5 = 57368,
+    f6 = 57369,
+    f7 = 57370,
+    f8 = 57371,
+    f9 = 57372,
+    f10 = 57373,
+    f11 = 57374,
+    f12 = 57375,
+    f13 = 57376,
+    f14 = 57377,
+    f15 = 57378,
+    f16 = 57379,
+    f17 = 57380,
+    f18 = 57381,
+    f19 = 57382,
+    f20 = 57383,
+    f21 = 57384,
+    f22 = 57385,
+    f23 = 57386,
+    f24 = 57387,
+    f25 = 57388,
+    f26 = 57389,
+    f27 = 57390,
+    f28 = 57391,
+    f29 = 57392,
+    f30 = 57393,
+    f31 = 57394,
+    f32 = 57395,
+    f33 = 57396,
+    f34 = 57397,
+    f35 = 57398,
+    kp_0 = 57399,
+    kp_1 = 57400,
+    kp_2 = 57401,
+    kp_3 = 57402,
+    kp_4 = 57403,
+    kp_5 = 57404,
+    kp_6 = 57405,
+    kp_7 = 57406,
+    kp_8 = 57407,
+    kp_9 = 57408,
+    kp_decimal = 57409,
+    kp_divide = 57410,
+    kp_multiply = 57411,
+    kp_subtract = 57412,
+    kp_add = 57413,
+    kp_enter = 57414,
+    kp_equal = 57415,
+    kp_separator = 57416,
+    kp_left = 57417,
+    kp_right = 57418,
+    kp_up = 57419,
+    kp_down = 57420,
+    kp_page_up = 57421,
+    kp_page_down = 57422,
+    kp_home = 57423,
+    kp_end = 57424,
+    kp_insert = 57425,
+    kp_delete = 57426,
+    kp_begin = 57427,
+    media_play = 57428,
+    media_pause = 57429,
+    media_play_pause = 57430,
+    media_reverse = 57431,
+    media_stop = 57432,
+    media_fast_forward = 57433,
+    media_rewind = 57434,
+    media_track_next = 57435,
+    media_track_previous = 57436,
+    media_record = 57437,
+    lower_volume = 57438,
+    raise_volume = 57439,
+    mute_volume = 57440,
+    left_shift = 57441,
+    left_control = 57442,
+    left_alt = 57443,
+    left_super = 57444,
+    left_hyper = 57445,
+    left_meta = 57446,
+    right_shift = 57447,
+    right_control = 57448,
+    right_alt = 57449,
+    right_super = 57450,
+    right_hyper = 57451,
+    right_meta = 57452,
+    iso_level_3_shift = 57453,
+    iso_level_5_shift = 57454,
+    _,
+
+    pub inline fn from(cp: u21) KeyCP {
+        return @enumFromInt(cp);
+    }
+
+    pub inline fn value(self: KeyCP) u21 {
+        return @intFromEnum(self);
+    }
+};
+
 // a few special keys that we encode as their actual ascii value
-pub const tab: u21 = 0x09;
-pub const enter: u21 = 0x0D;
-pub const escape: u21 = 0x1B;
-pub const space: u21 = 0x20;
-pub const backspace: u21 = 0x7F;
+pub const tab: u21 = @intFromEnum(KeyCP.tab);
+pub const enter: u21 = @intFromEnum(KeyCP.enter);
+pub const escape: u21 = @intFromEnum(KeyCP.escape);
+pub const space: u21 = @intFromEnum(KeyCP.space);
+pub const backspace: u21 = @intFromEnum(KeyCP.backspace);
 
 /// Multicodepoint is a key which generated text but cannot be expressed as a
 /// single codepoint. The value is the maximum unicode codepoint + 1
-pub const multicodepoint: u21 = 0x110000 + 1;
+pub const multicodepoint: u21 = @intFromEnum(KeyCP.multicodepoint);
 
 // kitty encodes these keys directly in the private use area. We reuse those
 // mappings
-pub const insert: u21 = 57348;
-pub const delete: u21 = 57349;
-pub const left: u21 = 57350;
-pub const right: u21 = 57351;
-pub const up: u21 = 57352;
-pub const down: u21 = 57353;
-pub const page_up: u21 = 57354;
-pub const page_down: u21 = 57355;
-pub const home: u21 = 57356;
-pub const end: u21 = 57357;
-pub const caps_lock: u21 = 57358;
-pub const scroll_lock: u21 = 57359;
-pub const num_lock: u21 = 57360;
-pub const print_screen: u21 = 57361;
-pub const pause: u21 = 57362;
-pub const menu: u21 = 57363;
-pub const f1: u21 = 57364;
-pub const f2: u21 = 57365;
-pub const f3: u21 = 57366;
-pub const f4: u21 = 57367;
-pub const f5: u21 = 57368;
-pub const f6: u21 = 57369;
-pub const f7: u21 = 57370;
-pub const f8: u21 = 57371;
-pub const f9: u21 = 57372;
-pub const f10: u21 = 57373;
-pub const f11: u21 = 57374;
-pub const f12: u21 = 57375;
-pub const f13: u21 = 57376;
-pub const f14: u21 = 57377;
-pub const f15: u21 = 57378;
-pub const @"f16": u21 = 57379;
-pub const f17: u21 = 57380;
-pub const f18: u21 = 57381;
-pub const f19: u21 = 57382;
-pub const f20: u21 = 57383;
-pub const f21: u21 = 57384;
-pub const f22: u21 = 57385;
-pub const f23: u21 = 57386;
-pub const f24: u21 = 57387;
-pub const f25: u21 = 57388;
-pub const f26: u21 = 57389;
-pub const f27: u21 = 57390;
-pub const f28: u21 = 57391;
-pub const f29: u21 = 57392;
-pub const f30: u21 = 57393;
-pub const f31: u21 = 57394;
-pub const @"f32": u21 = 57395;
-pub const f33: u21 = 57396;
-pub const f34: u21 = 57397;
-pub const f35: u21 = 57398;
-pub const kp_0: u21 = 57399;
-pub const kp_1: u21 = 57400;
-pub const kp_2: u21 = 57401;
-pub const kp_3: u21 = 57402;
-pub const kp_4: u21 = 57403;
-pub const kp_5: u21 = 57404;
-pub const kp_6: u21 = 57405;
-pub const kp_7: u21 = 57406;
-pub const kp_8: u21 = 57407;
-pub const kp_9: u21 = 57408;
-pub const kp_decimal: u21 = 57409;
-pub const kp_divide: u21 = 57410;
-pub const kp_multiply: u21 = 57411;
-pub const kp_subtract: u21 = 57412;
-pub const kp_add: u21 = 57413;
-pub const kp_enter: u21 = 57414;
-pub const kp_equal: u21 = 57415;
-pub const kp_separator: u21 = 57416;
-pub const kp_left: u21 = 57417;
-pub const kp_right: u21 = 57418;
-pub const kp_up: u21 = 57419;
-pub const kp_down: u21 = 57420;
-pub const kp_page_up: u21 = 57421;
-pub const kp_page_down: u21 = 57422;
-pub const kp_home: u21 = 57423;
-pub const kp_end: u21 = 57424;
-pub const kp_insert: u21 = 57425;
-pub const kp_delete: u21 = 57426;
-pub const kp_begin: u21 = 57427;
-pub const media_play: u21 = 57428;
-pub const media_pause: u21 = 57429;
-pub const media_play_pause: u21 = 57430;
-pub const media_reverse: u21 = 57431;
-pub const media_stop: u21 = 57432;
-pub const media_fast_forward: u21 = 57433;
-pub const media_rewind: u21 = 57434;
-pub const media_track_next: u21 = 57435;
-pub const media_track_previous: u21 = 57436;
-pub const media_record: u21 = 57437;
-pub const lower_volume: u21 = 57438;
-pub const raise_volume: u21 = 57439;
-pub const mute_volume: u21 = 57440;
-pub const left_shift: u21 = 57441;
-pub const left_control: u21 = 57442;
-pub const left_alt: u21 = 57443;
-pub const left_super: u21 = 57444;
-pub const left_hyper: u21 = 57445;
-pub const left_meta: u21 = 57446;
-pub const right_shift: u21 = 57447;
-pub const right_control: u21 = 57448;
-pub const right_alt: u21 = 57449;
-pub const right_super: u21 = 57450;
-pub const right_hyper: u21 = 57451;
-pub const right_meta: u21 = 57452;
-pub const iso_level_3_shift: u21 = 57453;
-pub const iso_level_5_shift: u21 = 57454;
+pub const insert: u21 = @intFromEnum(KeyCP.insert);
+pub const delete: u21 = @intFromEnum(KeyCP.delete);
+pub const left: u21 = @intFromEnum(KeyCP.left);
+pub const right: u21 = @intFromEnum(KeyCP.right);
+pub const up: u21 = @intFromEnum(KeyCP.up);
+pub const down: u21 = @intFromEnum(KeyCP.down);
+pub const page_up: u21 = @intFromEnum(KeyCP.page_up);
+pub const page_down: u21 = @intFromEnum(KeyCP.page_down);
+pub const home: u21 = @intFromEnum(KeyCP.home);
+pub const end: u21 = @intFromEnum(KeyCP.end);
+pub const caps_lock: u21 = @intFromEnum(KeyCP.caps_lock);
+pub const scroll_lock: u21 = @intFromEnum(KeyCP.scroll_lock);
+pub const num_lock: u21 = @intFromEnum(KeyCP.num_lock);
+pub const print_screen: u21 = @intFromEnum(KeyCP.print_screen);
+pub const pause: u21 = @intFromEnum(KeyCP.pause);
+pub const menu: u21 = @intFromEnum(KeyCP.menu);
+pub const f1: u21 = @intFromEnum(KeyCP.f1);
+pub const f2: u21 = @intFromEnum(KeyCP.f2);
+pub const f3: u21 = @intFromEnum(KeyCP.f3);
+pub const f4: u21 = @intFromEnum(KeyCP.f4);
+pub const f5: u21 = @intFromEnum(KeyCP.f5);
+pub const f6: u21 = @intFromEnum(KeyCP.f6);
+pub const f7: u21 = @intFromEnum(KeyCP.f7);
+pub const f8: u21 = @intFromEnum(KeyCP.f8);
+pub const f9: u21 = @intFromEnum(KeyCP.f9);
+pub const f10: u21 = @intFromEnum(KeyCP.f10);
+pub const f11: u21 = @intFromEnum(KeyCP.f11);
+pub const f12: u21 = @intFromEnum(KeyCP.f12);
+pub const f13: u21 = @intFromEnum(KeyCP.f13);
+pub const f14: u21 = @intFromEnum(KeyCP.f14);
+pub const f15: u21 = @intFromEnum(KeyCP.f15);
+pub const @"f16": u21 = @intFromEnum(KeyCP.f16);
+pub const f17: u21 = @intFromEnum(KeyCP.f17);
+pub const f18: u21 = @intFromEnum(KeyCP.f18);
+pub const f19: u21 = @intFromEnum(KeyCP.f19);
+pub const f20: u21 = @intFromEnum(KeyCP.f20);
+pub const f21: u21 = @intFromEnum(KeyCP.f21);
+pub const f22: u21 = @intFromEnum(KeyCP.f22);
+pub const f23: u21 = @intFromEnum(KeyCP.f23);
+pub const f24: u21 = @intFromEnum(KeyCP.f24);
+pub const f25: u21 = @intFromEnum(KeyCP.f25);
+pub const f26: u21 = @intFromEnum(KeyCP.f26);
+pub const f27: u21 = @intFromEnum(KeyCP.f27);
+pub const f28: u21 = @intFromEnum(KeyCP.f28);
+pub const f29: u21 = @intFromEnum(KeyCP.f29);
+pub const f30: u21 = @intFromEnum(KeyCP.f30);
+pub const f31: u21 = @intFromEnum(KeyCP.f31);
+pub const @"f32": u21 = @intFromEnum(KeyCP.f32);
+pub const f33: u21 = @intFromEnum(KeyCP.f33);
+pub const f34: u21 = @intFromEnum(KeyCP.f34);
+pub const f35: u21 = @intFromEnum(KeyCP.f35);
+pub const kp_0: u21 = @intFromEnum(KeyCP.kp_0);
+pub const kp_1: u21 = @intFromEnum(KeyCP.kp_1);
+pub const kp_2: u21 = @intFromEnum(KeyCP.kp_2);
+pub const kp_3: u21 = @intFromEnum(KeyCP.kp_3);
+pub const kp_4: u21 = @intFromEnum(KeyCP.kp_4);
+pub const kp_5: u21 = @intFromEnum(KeyCP.kp_5);
+pub const kp_6: u21 = @intFromEnum(KeyCP.kp_6);
+pub const kp_7: u21 = @intFromEnum(KeyCP.kp_7);
+pub const kp_8: u21 = @intFromEnum(KeyCP.kp_8);
+pub const kp_9: u21 = @intFromEnum(KeyCP.kp_9);
+pub const kp_decimal: u21 = @intFromEnum(KeyCP.kp_decimal);
+pub const kp_divide: u21 = @intFromEnum(KeyCP.kp_divide);
+pub const kp_multiply: u21 = @intFromEnum(KeyCP.kp_multiply);
+pub const kp_subtract: u21 = @intFromEnum(KeyCP.kp_subtract);
+pub const kp_add: u21 = @intFromEnum(KeyCP.kp_add);
+pub const kp_enter: u21 = @intFromEnum(KeyCP.kp_enter);
+pub const kp_equal: u21 = @intFromEnum(KeyCP.kp_equal);
+pub const kp_separator: u21 = @intFromEnum(KeyCP.kp_separator);
+pub const kp_left: u21 = @intFromEnum(KeyCP.kp_left);
+pub const kp_right: u21 = @intFromEnum(KeyCP.kp_right);
+pub const kp_up: u21 = @intFromEnum(KeyCP.kp_up);
+pub const kp_down: u21 = @intFromEnum(KeyCP.kp_down);
+pub const kp_page_up: u21 = @intFromEnum(KeyCP.kp_page_up);
+pub const kp_page_down: u21 = @intFromEnum(KeyCP.kp_page_down);
+pub const kp_home: u21 = @intFromEnum(KeyCP.kp_home);
+pub const kp_end: u21 = @intFromEnum(KeyCP.kp_end);
+pub const kp_insert: u21 = @intFromEnum(KeyCP.kp_insert);
+pub const kp_delete: u21 = @intFromEnum(KeyCP.kp_delete);
+pub const kp_begin: u21 = @intFromEnum(KeyCP.kp_begin);
+pub const media_play: u21 = @intFromEnum(KeyCP.media_play);
+pub const media_pause: u21 = @intFromEnum(KeyCP.media_pause);
+pub const media_play_pause: u21 = @intFromEnum(KeyCP.media_play_pause);
+pub const media_reverse: u21 = @intFromEnum(KeyCP.media_reverse);
+pub const media_stop: u21 = @intFromEnum(KeyCP.media_stop);
+pub const media_fast_forward: u21 = @intFromEnum(KeyCP.media_fast_forward);
+pub const media_rewind: u21 = @intFromEnum(KeyCP.media_rewind);
+pub const media_track_next: u21 = @intFromEnum(KeyCP.media_track_next);
+pub const media_track_previous: u21 = @intFromEnum(KeyCP.media_track_previous);
+pub const media_record: u21 = @intFromEnum(KeyCP.media_record);
+pub const lower_volume: u21 = @intFromEnum(KeyCP.lower_volume);
+pub const raise_volume: u21 = @intFromEnum(KeyCP.raise_volume);
+pub const mute_volume: u21 = @intFromEnum(KeyCP.mute_volume);
+pub const left_shift: u21 = @intFromEnum(KeyCP.left_shift);
+pub const left_control: u21 = @intFromEnum(KeyCP.left_control);
+pub const left_alt: u21 = @intFromEnum(KeyCP.left_alt);
+pub const left_super: u21 = @intFromEnum(KeyCP.left_super);
+pub const left_hyper: u21 = @intFromEnum(KeyCP.left_hyper);
+pub const left_meta: u21 = @intFromEnum(KeyCP.left_meta);
+pub const right_shift: u21 = @intFromEnum(KeyCP.right_shift);
+pub const right_control: u21 = @intFromEnum(KeyCP.right_control);
+pub const right_alt: u21 = @intFromEnum(KeyCP.right_alt);
+pub const right_super: u21 = @intFromEnum(KeyCP.right_super);
+pub const right_hyper: u21 = @intFromEnum(KeyCP.right_hyper);
+pub const right_meta: u21 = @intFromEnum(KeyCP.right_meta);
+pub const iso_level_3_shift: u21 = @intFromEnum(KeyCP.iso_level_3_shift);
+pub const iso_level_5_shift: u21 = @intFromEnum(KeyCP.iso_level_5_shift);
 
 pub const name_map = blk: {
     @setEvalBranchQuota(2000);
@@ -467,51 +599,51 @@ const testing = std.testing;
 
 test "matches 'a'" {
     const key: Key = .{
-        .codepoint = 'a',
+        .codepoint = .from('a'),
         .mods = .{ .num_lock = true },
         .text = .from("a"),
     };
-    try testing.expect(key.matches('a', .{}));
-    try testing.expect(!key.matches('a', .{ .shift = true }));
+    try testing.expect(key.matches(.from('a'), .{}));
+    try testing.expect(!key.matches(.from('a'), .{ .shift = true }));
 }
 
 test "matches 'shift+a'" {
     const key: Key = .{
-        .codepoint = 'a',
-        .shifted_codepoint = 'A',
+        .codepoint = .from('a'),
+        .shifted_codepoint = .from('A'),
         .mods = .{ .shift = true },
         .text = .from("A"),
     };
-    try testing.expect(key.matches('a', .{ .shift = true }));
-    try testing.expect(!key.matches('a', .{}));
-    try testing.expect(key.matches('A', .{}));
-    try testing.expect(!key.matches('A', .{ .ctrl = true }));
+    try testing.expect(key.matches(.from('a'), .{ .shift = true }));
+    try testing.expect(!key.matches(.from('a'), .{}));
+    try testing.expect(key.matches(.from('A'), .{}));
+    try testing.expect(!key.matches(.from('A'), .{ .ctrl = true }));
 }
 
 test "matches 'shift+tab'" {
     const key: Key = .{
-        .codepoint = Key.tab,
+        .codepoint = .tab,
         .mods = .{ .shift = true, .num_lock = true },
     };
-    try testing.expect(key.matches(Key.tab, .{ .shift = true }));
-    try testing.expect(!key.matches(Key.tab, .{}));
+    try testing.expect(key.matches(.tab, .{ .shift = true }));
+    try testing.expect(!key.matches(.tab, .{}));
 }
 
 test "matches 'shift+;'" {
     const key: Key = .{
-        .codepoint = ';',
-        .shifted_codepoint = ':',
+        .codepoint = .from(';'),
+        .shifted_codepoint = .from(':'),
         .mods = .{ .shift = true },
         .text = .from(":"),
     };
-    try testing.expect(key.matches(';', .{ .shift = true }));
-    try testing.expect(key.matches(':', .{}));
+    try testing.expect(key.matches(.from(';'), .{ .shift = true }));
+    try testing.expect(key.matches(.from(':'), .{}));
 
     const colon: Key = .{
-        .codepoint = ':',
+        .codepoint = .from(':'),
         .mods = .{},
     };
-    try testing.expect(colon.matches(':', .{}));
+    try testing.expect(colon.matches(.from(':'), .{}));
 }
 
 test "name_map" {
@@ -519,8 +651,8 @@ test "name_map" {
 }
 
 test "upper mapping" {
-    const small_greek_letter = 0x03C2;
-    const capital_greek_letter = 0x03A3;
+    const small_greek_letter = KeyCP.from(0x03C2);
+    const capital_greek_letter = KeyCP.from(0x03A3);
 
     const key = Key{
         .codepoint = small_greek_letter,

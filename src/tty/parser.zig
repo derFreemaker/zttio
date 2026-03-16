@@ -52,7 +52,7 @@ pub fn parse(self: *Parser, input: []const u8) !ParseResult {
             else => {
                 // Anything else is an "alt + <char>" keypress
                 const key: Key = .{
-                    .codepoint = input[1],
+                    .codepoint = .from(input[1]),
                     .mods = .{ .alt = true },
                 };
                 return .event(2, Event{ .key_press = key });
@@ -72,22 +72,22 @@ fn parseNormal(input: []const u8) !ParseResult {
     // 0x20 is a Ctrl+<c> keypress. We map these to lowercase
     // ascii characters when we can
     const key: Key = switch (b) {
-        0x00 => .{ .codepoint = '@', .mods = .{ .ctrl = true } },
-        0x08 => .{ .codepoint = Key.backspace },
-        0x09 => .{ .codepoint = Key.tab },
-        0x0A => .{ .codepoint = 'j', .mods = .{ .ctrl = true } },
-        0x0D => .{ .codepoint = Key.enter },
+        0x00 => .{ .codepoint = .from('@'), .mods = .{ .ctrl = true } },
+        0x08 => .{ .codepoint = .backspace },
+        0x09 => .{ .codepoint = .tab },
+        0x0A => .{ .codepoint = .from('j'), .mods = .{ .ctrl = true } },
+        0x0D => .{ .codepoint = .enter },
         0x01...0x07,
         0x0B...0x0C,
         0x0E...0x1A,
-        => .{ .codepoint = b + 0x60, .mods = .{ .ctrl = true } },
+        => .{ .codepoint = .from(b + 0x60), .mods = .{ .ctrl = true } },
         0x1B => escape: {
             std.debug.assert(input.len == 1); // parseGround expects len == 1 with 0x1b
             break :escape .{
-                .codepoint = Key.escape,
+                .codepoint = .escape,
             };
         },
-        0x7F => .{ .codepoint = Key.backspace },
+        0x7F => .{ .codepoint = .backspace },
         else => blk: {
             var iter = uucode.utf8.Iterator.init(input);
 
@@ -116,7 +116,7 @@ fn parseNormal(input: []const u8) !ParseResult {
             }
 
             break :blk Key{
-                .codepoint = code,
+                .codepoint = .from(code),
                 .text = .from(input[0..n]),
             };
         },
@@ -137,17 +137,17 @@ fn parseSs3(input: []const u8) ParseResult {
 
     const key: Key = switch (input[2]) {
         0x1B => return .skip(2),
-        'A' => .{ .codepoint = Key.up },
-        'B' => .{ .codepoint = Key.down },
-        'C' => .{ .codepoint = Key.right },
-        'D' => .{ .codepoint = Key.left },
-        'E' => .{ .codepoint = Key.kp_begin },
-        'F' => .{ .codepoint = Key.end },
-        'H' => .{ .codepoint = Key.home },
-        'P' => .{ .codepoint = Key.f1 },
-        'Q' => .{ .codepoint = Key.f2 },
-        'R' => .{ .codepoint = Key.f3 },
-        'S' => .{ .codepoint = Key.f4 },
+        'A' => .{ .codepoint = .up },
+        'B' => .{ .codepoint = .down },
+        'C' => .{ .codepoint = .right },
+        'D' => .{ .codepoint = .left },
+        'E' => .{ .codepoint = .kp_begin },
+        'F' => .{ .codepoint = .end },
+        'H' => .{ .codepoint = .home },
+        'P' => .{ .codepoint = .f1 },
+        'Q' => .{ .codepoint = .f2 },
+        'R' => .{ .codepoint = .f3 },
+        'S' => .{ .codepoint = .f4 },
         else => {
             return .skip(3);
         },
@@ -283,17 +283,17 @@ fn parseCsi(self: *Parser, input: []const u8) error{OutOfMemory}!ParseResult {
             var is_release: bool = false;
             var key: Key = .{
                 .codepoint = switch (final) {
-                    'A' => Key.up,
-                    'B' => Key.down,
-                    'C' => Key.right,
-                    'D' => Key.left,
-                    'E' => Key.kp_begin,
-                    'F' => Key.end,
-                    'H' => Key.home,
-                    'P' => Key.f1,
-                    'Q' => Key.f2,
-                    'R' => Key.f3,
-                    'S' => Key.f4,
+                    'A' => .up,
+                    'B' => .down,
+                    'C' => .right,
+                    'D' => .left,
+                    'E' => .kp_begin,
+                    'F' => .end,
+                    'H' => .home,
+                    'P' => .f1,
+                    'Q' => .f2,
+                    'R' => .f3,
+                    'S' => .f4,
                     else => return skip,
                 },
             };
@@ -341,27 +341,27 @@ fn parseCsi(self: *Parser, input: []const u8) error{OutOfMemory}!ParseResult {
 
             var key: Key = .{
                 .codepoint = switch (number) {
-                    2 => Key.insert,
-                    3 => Key.delete,
-                    5 => Key.page_up,
-                    6 => Key.page_down,
-                    7 => Key.home,
-                    8 => Key.end,
-                    11 => Key.f1,
-                    12 => Key.f2,
-                    13 => Key.f3,
-                    14 => Key.f4,
-                    15 => Key.f5,
-                    17 => Key.f6,
-                    18 => Key.f7,
-                    19 => Key.f8,
-                    20 => Key.f9,
-                    21 => Key.f10,
-                    23 => Key.f11,
-                    24 => Key.f12,
+                    2 => .insert,
+                    3 => .delete,
+                    5 => .page_up,
+                    6 => .page_down,
+                    7 => .home,
+                    8 => .end,
+                    11 => .f1,
+                    12 => .f2,
+                    13 => .f3,
+                    14 => .f4,
+                    15 => .f5,
+                    17 => .f6,
+                    18 => .f7,
+                    19 => .f8,
+                    20 => .f9,
+                    21 => .f10,
+                    23 => .f11,
+                    24 => .f12,
                     200 => return .{ .parse = .paste_start, .n = sequence.len },
                     201 => return .{ .parse = .paste_end, .n = sequence.len },
-                    57427 => Key.kp_begin,
+                    57427 => .kp_begin,
                     else => return skip,
                 },
             };
@@ -476,13 +476,13 @@ fn parseCsi(self: *Parser, input: []const u8) error{OutOfMemory}!ParseResult {
                 const field_buf = field_iter.next() orelse unreachable; // There will always be at least one field
                 var param_iter = std.mem.splitScalar(u8, field_buf, ':');
                 const codepoint_buf = param_iter.next() orelse unreachable;
-                key.codepoint = parseParam(u21, codepoint_buf, null) orelse return skip;
+                key.codepoint = parseKeyCP(codepoint_buf, null) orelse return skip;
 
                 if (param_iter.next()) |shifted_cp_buf| {
-                    key.shifted_codepoint = parseParam(u21, shifted_cp_buf, null);
+                    key.shifted_codepoint = parseKeyCP(shifted_cp_buf, null);
                 }
                 if (param_iter.next()) |base_layout_buf| {
-                    key.base_layout_codepoint = parseParam(u21, base_layout_buf, null);
+                    key.shifted_codepoint = parseKeyCP(base_layout_buf, null);
                 }
             }
 
@@ -528,16 +528,16 @@ fn parseCsi(self: *Parser, input: []const u8) error{OutOfMemory}!ParseResult {
                 };
                 if (key.text == .empty and
                     key.mods.eql(mod_test) and
-                    key.codepoint <= std.math.maxInt(u8) and
-                    std.ascii.isPrint(@intCast(key.codepoint)))
+                    key.codepoint.value() <= std.math.maxInt(u8) and
+                    std.ascii.isPrint(@intCast(key.codepoint.value())))
                 {
                     // Encode the codepoint as upper
-                    const upper = std.ascii.toUpper(@intCast(key.codepoint));
+                    const upper = std.ascii.toUpper(@intCast(key.codepoint.value()));
                     const text_buf = try self.arena.allocator().alloc(u8, std.unicode.utf8CodepointSequenceLength(upper) catch unreachable);
                     _ = std.unicode.utf8Encode(upper, text_buf) catch unreachable;
 
                     key.text = .from(text_buf);
-                    key.shifted_codepoint = upper;
+                    key.shifted_codepoint = .from(upper);
                 }
             }
 
@@ -690,6 +690,12 @@ inline fn parseParam(comptime T: type, buf: []const u8, default: ?T) ?T {
     return std.fmt.parseInt(T, buf, 10) catch return null;
 }
 
+/// Parse a param buffer, returning a default value if the param was empty
+inline fn parseKeyCP(buf: []const u8, default: ?Key.KeyCP) ?Key.KeyCP {
+    if (buf.len == 0) return default;
+    return .from(std.fmt.parseInt(u21, buf, 10) catch return null);
+}
+
 /// Parse a mouse event
 inline fn parseMouse(input: []const u8, full_input: []const u8) ParseResult {
     const skip: ParseResult = .skip(input.len);
@@ -808,7 +814,7 @@ test "parse(NORMAL): single keypress" {
     const input = "a";
     const result = try parser.parse(input);
     const expected_key: Key = .{
-        .codepoint = 'a',
+        .codepoint = .from('a'),
         .text = .from("a"),
     };
     const expected_event: Event = .{ .key_press = expected_key };
@@ -824,9 +830,7 @@ test "parse(NORMAL): single keypress backspace" {
 
     const input = "\x08";
     const result = try parser.parse(input);
-    const expected_key: Key = .{
-        .codepoint = Key.backspace,
-    };
+    const expected_key: Key = .{ .codepoint = .backspace };
     const expected_event: Event = .{ .key_press = expected_key };
 
     try testing.expectEqual(1, result.n);
@@ -840,7 +844,7 @@ test "parse(NORMAL): single keypress with more buffer" {
     defer parser.deinit();
     const result = try parser.parse(input);
     const expected_key: Key = .{
-        .codepoint = 'a',
+        .codepoint = .from('a'),
         .text = .from("a"),
     };
     const expected_event: Event = .{ .key_press = expected_key };
@@ -857,7 +861,7 @@ test "parse(NORMAL): escape keypress" {
 
     const input = ctlseqs.ESC;
     const result = try parser.parse(input);
-    const expected_key: Key = .{ .codepoint = Key.escape };
+    const expected_key: Key = .{ .codepoint = .escape };
     const expected_event: Event = .{ .key_press = expected_key };
 
     try testing.expectEqual(1, result.n);
@@ -871,7 +875,7 @@ test "parse(NORMAL): ctrl+a" {
 
     const input = "\x01";
     const result = try parser.parse(input);
-    const expected_key: Key = .{ .codepoint = 'a', .mods = .{ .ctrl = true } };
+    const expected_key: Key = .{ .codepoint = .from('a'), .mods = .{ .ctrl = true } };
     const expected_event: Event = .{ .key_press = expected_key };
 
     try testing.expectEqual(1, result.n);
@@ -885,7 +889,7 @@ test "parse(NORMAL): alt+a" {
 
     const input = ctlseqs.ESC ++ "a";
     const result = try parser.parse(input);
-    const expected_key: Key = .{ .codepoint = 'a', .mods = .{ .alt = true } };
+    const expected_key: Key = .{ .codepoint = .from('a'), .mods = .{ .alt = true } };
     const expected_event: Event = .{ .key_press = expected_key };
 
     try testing.expectEqual(2, result.n);
@@ -900,7 +904,7 @@ test "parse(NORMAL): single codepoint" {
     const input = "🙂";
     const result = try parser.parse(input);
     const expected_key: Key = .{
-        .codepoint = 0x1F642,
+        .codepoint = .from(0x1F642),
         .text = .from(input),
     };
     const expected_event: Event = .{ .key_press = expected_key };
@@ -917,7 +921,7 @@ test "parse(NORMAL): single codepoint with more in buffer" {
     const input = "🙂a";
     const result = try parser.parse(input);
     const expected_key: Key = .{
-        .codepoint = 0x1F642,
+        .codepoint = .from(0x1F642),
         .text = .from("🙂"),
     };
     const expected_event: Event = .{ .key_press = expected_key };
@@ -934,7 +938,7 @@ test "parse(NORMAL): multiple codepoint grapheme" {
     const input = "👩‍🚀";
     const result = try parser.parse(input);
     const expected_key: Key = .{
-        .codepoint = Key.multicodepoint,
+        .codepoint = .multicodepoint,
         .text = .from(input),
     };
     const expected_event: Event = .{ .key_press = expected_key };
@@ -951,7 +955,7 @@ test "parse(NORMAL): multiple codepoint grapheme with more after" {
     const input = "👩‍🚀abc";
     const result = try parser.parse(input);
     const expected_key: Key = .{
-        .codepoint = Key.multicodepoint,
+        .codepoint = .multicodepoint,
         .text = .from("👩‍🚀"),
     };
 
@@ -969,7 +973,7 @@ test "parse(NORMAL): flag emoji" {
     const input = "🇺🇸";
     const result = try parser.parse(input);
     const expected_key: Key = .{
-        .codepoint = Key.multicodepoint,
+        .codepoint = .multicodepoint,
         .text = .from(input),
     };
     const expected_event: Event = .{ .key_press = expected_key };
@@ -987,7 +991,7 @@ test "parse(NORMAL): combining mark" {
     const input = "a\u{0301}";
     const result = try parser.parse(input);
     const expected_key: Key = .{
-        .codepoint = Key.multicodepoint,
+        .codepoint = .multicodepoint,
         .text = .from(input),
     };
     const expected_event: Event = .{ .key_press = expected_key };
@@ -1004,7 +1008,7 @@ test "parse(NORMAL): skin tone emoji" {
     const input = "👋🏿";
     const result = try parser.parse(input);
     const expected_key: Key = .{
-        .codepoint = Key.multicodepoint,
+        .codepoint = .multicodepoint,
         .text = .from(input),
     };
     const expected_event: Event = .{ .key_press = expected_key };
@@ -1022,7 +1026,7 @@ test "parse(NORMAL): text variation selector" {
     const input = "❤︎";
     const result = try parser.parse(input);
     const expected_key: Key = .{
-        .codepoint = Key.multicodepoint,
+        .codepoint = .multicodepoint,
         .text = .from(input),
     };
     const expected_event: Event = .{ .key_press = expected_key };
@@ -1039,7 +1043,7 @@ test "parse(NORMAL): keycap sequence" {
     const input = "1️⃣";
     const result = try parser.parse(input);
     const expected_key: Key = .{
-        .codepoint = Key.multicodepoint,
+        .codepoint = .multicodepoint,
         .text = .from(input),
     };
     const expected_event: Event = .{ .key_press = expected_key };
@@ -1055,7 +1059,7 @@ test "parse(SS3): key up" {
 
     const input = ctlseqs.SS3 ++ "A";
     const result = try parser.parse(input);
-    const expected_key: Key = .{ .codepoint = Key.up };
+    const expected_key: Key = .{ .codepoint = .up };
     const expected_event: Event = .{ .key_press = expected_key };
 
     try testing.expectEqual(3, result.n);
@@ -1069,7 +1073,7 @@ test "parse(CSI): key up" {
 
     const input = ctlseqs.CSI ++ "A";
     const result = try parser.parse(input);
-    const expected_key: Key = .{ .codepoint = Key.up };
+    const expected_key: Key = .{ .codepoint = .up };
     const expected_event: Event = .{ .key_press = expected_key };
 
     try testing.expectEqual(3, result.n);
@@ -1083,7 +1087,7 @@ test "parse(CSI): shift+up" {
 
     const input = ctlseqs.CSI ++ "1;2A";
     const result = try parser.parse(input);
-    const expected_key: Key = .{ .codepoint = Key.up, .mods = .{ .shift = true } };
+    const expected_key: Key = .{ .codepoint = .up, .mods = .{ .shift = true } };
     const expected_event: Event = .{ .key_press = expected_key };
 
     try testing.expectEqual(6, result.n);
@@ -1096,7 +1100,7 @@ test "parse(CSI): insert" {
     var parser: Parser = .init(alloc);
     defer parser.deinit();
     const result = try parser.parse(input);
-    const expected_key: Key = .{ .codepoint = Key.insert, .mods = .{} };
+    const expected_key: Key = .{ .codepoint = .insert, .mods = .{} };
     const expected_event: Event = .{ .key_press = expected_key };
 
     try testing.expectEqual(input.len, result.n);
@@ -1111,8 +1115,8 @@ test "parse(CSI): disambiguate shift + space" {
     const input = ctlseqs.CSI ++ "32;2u";
     const result = try parser.parse(input);
     const expected_key: Key = .{
-        .codepoint = ' ',
-        .shifted_codepoint = ' ',
+        .codepoint = .from(' '),
+        .shifted_codepoint = .from(' '),
         .mods = .{ .shift = true },
         .text = .from(" "),
     };
@@ -1316,8 +1320,8 @@ test "parse(CSI): kitty: shift+a with text reporting" {
     const input = ctlseqs.CSI ++ "97:65;2;229u";
     const result = try parser.parse(input);
     const expected_key: Key = .{
-        .codepoint = 'a',
-        .shifted_codepoint = 'A',
+        .codepoint = .from('a'),
+        .shifted_codepoint = .from('A'),
         .mods = .{ .shift = true },
         .text = .from("å"),
     };
@@ -1335,8 +1339,8 @@ test "parse(CSI): kitty: shift+a without text reporting" {
     const input = ctlseqs.CSI ++ "97:65;2u";
     const result = try parser.parse(input);
     const expected_key: Key = .{
-        .codepoint = 'a',
-        .shifted_codepoint = 'A',
+        .codepoint = .from('a'),
+        .shifted_codepoint = .from('A'),
         .mods = .{ .shift = true },
         .text = .from("A"),
     };
@@ -1354,8 +1358,8 @@ test "parse(CSI): kitty: alt+shift+a without text reporting" {
     const input = ctlseqs.CSI ++ "97:65;4u";
     const result = try parser.parse(input);
     const expected_key: Key = .{
-        .codepoint = 'a',
-        .shifted_codepoint = 'A',
+        .codepoint = .from('a'),
+        .shifted_codepoint = .from('A'),
         .mods = .{ .shift = true, .alt = true },
     };
     const expected_event: Event = .{ .key_press = expected_key };
@@ -1372,7 +1376,7 @@ test "parse(CSI): kitty: a without text reporting" {
     const input = ctlseqs.CSI ++ "97u";
     const result = try parser.parse(input);
     const expected_key: Key = .{
-        .codepoint = 'a',
+        .codepoint = .from('a'),
     };
     const expected_event: Event = .{ .key_press = expected_key };
 
@@ -1388,7 +1392,7 @@ test "parse(CSI): kitty: release event" {
     const input = ctlseqs.CSI ++ "97;1:3u";
     const result = try parser.parse(input);
     const expected_key: Key = .{
-        .codepoint = 'a',
+        .codepoint = .from('a'),
     };
     const expected_event: Event = .{ .key_release = expected_key };
 
