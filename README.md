@@ -32,10 +32,13 @@ from [libvaxis](https://github.com/rockorager/libvaxis/tree/11f53c701ae6b5633582
 - [Kitty Multi Cursor](https://sw.kovidgoyal.net/kitty/multiple-cursors-protocol)
 - [Kitty Image Protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol)
 
-## Not Planned Features (can be contributed)
+## Not Planned Features
 - Kitty Image Protocol using Shared Memory
 - [Sixel](https://en.wikipedia.org/wiki/Sixel)
 - [iTerm2 Image Protocol](https://iterm2.com/documentation-images.html)
+
+## Contributions
+I don't currently accept contributions.
 
 ## Dependencies
 
