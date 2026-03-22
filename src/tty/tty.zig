@@ -269,7 +269,7 @@ pub fn setCursorShape(self: *Tty, shape: ctlseqs.Cursor.Shape) std.Io.Writer.Err
 pub fn moveCursor(self: *Tty, move_cursor: MoveCursor) std.Io.Writer.Error!void {
     const cursor = ctlseqs.Cursor;
 
-    switch (move_cursor) {
+    move: switch (move_cursor) {
         .home => {
             return self.stdout.writeAll(cursor.home);
         },
@@ -277,21 +277,27 @@ pub fn moveCursor(self: *Tty, move_cursor: MoveCursor) std.Io.Writer.Error!void 
             return cursor.moveTo(self.stdout, pos.row, pos.column);
         },
         .up => |x| {
+            if (x == 0) return;
             return cursor.moveUp(self.stdout, x);
         },
         .down => |x| {
+            if (x == 0) return;
             return cursor.moveDown(self.stdout, x);
         },
         .left => |x| {
+            if (x == 0) return;
             return cursor.moveLeft(self.stdout, x);
         },
         .right => |x| {
+            if (x == 0) return;
             return cursor.moveRight(self.stdout, x);
         },
         .front_up => |x| {
+            if (x == 0) continue :move .front;
             return cursor.moveFrontUp(self.stdout, x);
         },
         .front_down => |x| {
+            if (x == 0) continue :move .front;
             return cursor.moveFrontDown(self.stdout, x);
         },
         .column => |x| {
@@ -302,10 +308,10 @@ pub fn moveCursor(self: *Tty, move_cursor: MoveCursor) std.Io.Writer.Error!void 
         },
 
         .front => {
-            return self.moveCursor(.{ .column = 0 });
+            continue :move .{ .column = 0 };
         },
         .end => {
-            return self.moveCursor(.{ .column = self.getWinsize().cols });
+            continue :move .{ .column = self.getWinsize().cols };
         },
     }
 }
