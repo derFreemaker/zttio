@@ -2,7 +2,9 @@ const std = @import("std");
 const builtin = @import("builtin");
 const zttio = @import("zttio");
 
-var global_tty: ?*zttio.Tty = null;
+const Tty = zttio.Tty(.{});
+
+var global_tty: ?*Tty = null;
 
 pub const panic = std.debug.FullPanic(testPanic);
 pub fn testPanic(msg: []const u8, ret_addr: ?usize) noreturn {
@@ -26,7 +28,7 @@ pub fn main() !u8 {
     const stdin: std.fs.File = .stdin();
     const stdout: std.fs.File = .stdout();
 
-    var tty = try zttio.Tty.init(allocator, event_allocator, stdin, stdout, .{});
+    var tty = try Tty.init(allocator, event_allocator, stdin, stdout, .{});
     global_tty = tty;
     defer {
         global_tty = null;
@@ -44,7 +46,7 @@ pub fn main() !u8 {
 
     var pos_row: u16 = 5;
     while (true) {
-        var event = tty.nextEvent();
+        var event = try tty.nextEvent();
         defer event.deinit(event_allocator);
 
         try tty.moveCursor(.{ .pos = .{ .row = pos_row } });
@@ -80,7 +82,7 @@ pub fn main() !u8 {
             .winsize => |winsize| {
                 try tty.moveCursor(.{ .pos = .{ .row = 3 } });
                 try tty.clearLine(.entire);
-                try tty.stdout.print("{any}", .{winsize});
+                try tty.stdout.print("winsize: {any}", .{winsize});
             },
             else => {},
         }

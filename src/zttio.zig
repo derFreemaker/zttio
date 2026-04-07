@@ -18,4 +18,4 @@ pub const Key = common.Key;
 pub const Mouse = common.Mouse;
 pub const Winsize = common.Winsize;
 
-pub const Tty = @import("tty");
+pub const Tty = @import("tty").Tty;

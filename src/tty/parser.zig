@@ -27,6 +27,11 @@ pub fn deinit(self: *Parser) void {
     self.arena.deinit();
 }
 
+pub const ParseError = error{
+    InvalidUTF8,
+    ParseFailed,
+} || std.mem.Allocator.Error;
+
 /// Parse the first event from the input buffer. If a completion event is not
 /// present, Result.event will be null and Result.n will be 0
 ///
@@ -62,7 +67,7 @@ pub fn parse(self: *Parser, input: []const u8) !ParseResult {
 }
 
 /// Parse ground state
-fn parseNormal(input: []const u8) !ParseResult {
+fn parseNormal(input: []const u8) ParseError!ParseResult {
     std.debug.assert(input.len > 0);
 
     const b = input[0];
@@ -173,7 +178,7 @@ fn skipUntilST(input: []const u8) ParseResult {
 }
 
 /// Parses an OSC sequence
-fn parseOsc(self: *Parser, input: []const u8) !ParseResult {
+fn parseOsc(self: *Parser, input: []const u8) ParseError!ParseResult {
     if (input.len < 3) {
         return .none;
     }
@@ -207,7 +212,7 @@ fn parseOsc(self: *Parser, input: []const u8) !ParseResult {
             else
                 input[color_idx_delim + 1 .. sequence.len - 2];
 
-            const color = try Color.rgbFromSpec(color_spec);
+            const color = Color.rgbFromSpec(color_spec) catch return ParseError.ParseFailed;
             const event: Color.Report = .{
                 .kind = .{ .index = ps_idx },
                 .color = color,
@@ -223,7 +228,7 @@ fn parseOsc(self: *Parser, input: []const u8) !ParseResult {
             else
                 input[semicolon_idx + 1 .. sequence.len - 2];
 
-            const color = try Color.rgbFromSpec(color_spec);
+            const color = Color.rgbFromSpec(color_spec) catch return ParseError.ParseFailed;
             const event: Color.Report = .{
                 .kind = switch (ps) {
                     10 => .fg,
@@ -242,10 +247,10 @@ fn parseOsc(self: *Parser, input: []const u8) !ParseResult {
             else
                 input[semicolon_idx + 3 .. sequence.len - 2];
             const decoder = std.base64.standard.Decoder;
-            const payload_size = try decoder.calcSizeForSlice(payload);
+            const payload_size = decoder.calcSizeForSlice(payload) catch return ParseError.ParseFailed;
 
             const text = try self.arena.allocator().alloc(u8, payload_size);
-            try decoder.decode(text, payload);
+            decoder.decode(text, payload) catch return ParseError.ParseFailed;
             log.debug("decoded paste: {s}", .{text});
 
             return .event(sequence.len, Event{ .paste = text });
@@ -254,7 +259,7 @@ fn parseOsc(self: *Parser, input: []const u8) !ParseResult {
     }
 }
 
-fn parseCsi(self: *Parser, input: []const u8) error{OutOfMemory}!ParseResult {
+fn parseCsi(self: *Parser, input: []const u8) ParseError!ParseResult {
     if (input.len < 3) {
         return .none;
     }

@@ -40,7 +40,7 @@ pub const Color = union(enum) {
     /// parse an XParseColor-style rgb specification into an rgb Color. The spec
     /// is of the form: rgb:rrrr/gggg/bbbb. Generally, the high two bits will always
     /// be the same as the low two bits.
-    pub fn rgbFromSpec(spec: []const u8) error{InvalidColorSpec, Overflow, InvalidCharacter}!Color {
+    pub fn rgbFromSpec(spec: []const u8) error{InvalidColorSpec}!Color {
         var iter = std.mem.splitScalar(u8, spec, ':');
         const prefix = iter.next() orelse return error.InvalidColorSpec;
         if (!std.mem.eql(u8, "rgb", prefix)) return error.InvalidColorSpec;
@@ -58,9 +58,9 @@ pub const Color = union(enum) {
         const b_raw = spec_iter.next() orelse return error.InvalidColorSpec;
         if (b_raw.len != 4) return error.InvalidColorSpec;
 
-        const r = try std.fmt.parseUnsigned(u8, r_raw[2..], 16);
-        const g = try std.fmt.parseUnsigned(u8, g_raw[2..], 16);
-        const b = try std.fmt.parseUnsigned(u8, b_raw[2..], 16);
+        const r = std.fmt.parseUnsigned(u8, r_raw[2..], 16) catch return error.InvalidColorSpec;
+        const g = std.fmt.parseUnsigned(u8, g_raw[2..], 16) catch return error.InvalidColorSpec;
+        const b = std.fmt.parseUnsigned(u8, b_raw[2..], 16) catch return error.InvalidColorSpec;
 
         return .{
             .rgb = [_]u8{ r, g, b },

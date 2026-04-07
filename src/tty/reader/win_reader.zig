@@ -43,7 +43,7 @@ pub fn getWinsize(stdout_handle: std.fs.File.Handle) error{Unexpected}!Winsize {
     };
 }
 
-pub fn next(self: *WinReader) error{ ReadFailed, EOF }!?ReadResult {
+pub fn next(self: *WinReader) error{ReadFailed}!?ReadResult {
     var utf16_buf: [2]u16 = undefined;
     var utf16_half: bool = false;
 

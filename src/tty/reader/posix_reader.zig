@@ -17,7 +17,7 @@ pub fn init(stdin_fd: std.fs.File.Handle, _: std.fs.File.Handle) PosixReader {
     };
 }
 
-pub fn next(self: *PosixReader) error{ OutOfMemory, ReadFailed, EOF }!?ReadResult {
+pub fn next(self: *PosixReader) error{ReadFailed}!?ReadResult {
     var buf: [4]u8 = undefined;
     const n = posix.read(self.stdin_fd, buf[0..1]) catch |err| switch (err) {
         error.WouldBlock => return null,
