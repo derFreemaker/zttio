@@ -35,12 +35,9 @@ pub fn getWinsize(stdout_handle: std.fs.File.Handle) error{Unexpected}!Winsize {
         return windows.unexpectedError(windows.kernel32.GetLastError());
     }
 
-    const widht = console_info.srWindow.Right - console_info.srWindow.Left;
-    const height = console_info.srWindow.Bottom - console_info.srWindow.Top + 1;
-
     return Winsize{
-        .cols = @intCast(widht),
-        .rows = @intCast(height),
+        .cols = @intCast(console_info.dwSize.X),
+        .rows = @intCast(console_info.dwSize.Y),
         .x_pixel = 0,
         .y_pixel = 0,
     };
