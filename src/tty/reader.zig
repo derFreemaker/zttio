@@ -133,9 +133,8 @@ pub fn Reader(comptime config: ReaderConfig) type {
             if (comptime builtin.is_test) return;
 
             while (!self.should_quit) {
-                if (try self.parseNext(&self.should_quit)) |event| {
-                    self.postEvent(event);
-                }
+                const event = try self.parseNext(&self.should_quit);
+                self.postEvent(event);
             }
         }
 
