@@ -2,7 +2,7 @@ const std = @import("std");
 const posix = std.posix;
 const builtin = @import("builtin");
 
-const Winsize = @import("../../winsize.zig").Winsize;
+const Winsize = @import("winsize.zig").Winsize;
 
 pub const SignalCallback = struct {
     context: *anyopaque,

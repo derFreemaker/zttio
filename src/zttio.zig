@@ -11,6 +11,7 @@ pub const Event = @import("event.zig").Event;
 pub const Key = @import("key.zig");
 pub const Mouse = @import("mouse.zig");
 pub const Winsize = @import("winsize.zig").Winsize;
+pub const SigwinchHandling = @import("sigwinch_handling.zig");
 
 pub const Adapter = @import("adapter.zig");
 pub const Adapters = struct {

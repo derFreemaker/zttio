@@ -2,6 +2,7 @@ const std = @import("std");
 const posix = std.posix;
 const builtin = @import("builtin");
 
+const SigwinchHandling = @import("../sigwinch_handling.zig");
 const Winsize = @import("../winsize.zig").Winsize;
 const Adapter = @import("../adapter.zig");
 const ReadResult = Adapter.ReadResult;
@@ -20,6 +21,9 @@ stdout_writer: std.fs.File.Writer,
 
 termios: ?posix.termios = null,
 
+winsize_mutex: std.Thread.Mutex = .{},
+winsize: ?Winsize = null,
+
 pub fn init(allocator: std.mem.Allocator, stdin: std.fs.File, stdout: std.fs.File) error{ OutOfMemory, NoTty }!PosixAdapter {
     if (!stdout.isTty()) return error.NoTty;
 
@@ -32,7 +36,7 @@ pub fn init(allocator: std.mem.Allocator, stdin: std.fs.File, stdout: std.fs.Fil
     return PosixAdapter{
         .stdin = stdin.handle,
         .stdin_buf = stdin_buf,
-        .stdin_reader = stdin.readerStreaming(&.{}),
+        .stdin_reader = stdin.reader(stdin_buf),
 
         .stdout = stdout.handle,
         .stdout_buf = stdout_buf,
@@ -64,8 +68,24 @@ pub fn adapter(self: *PosixAdapter) Adapter {
     };
 }
 
-/// Get the window size from the kernel
-pub fn getWinsize(self_ptr: *anyopaque) Adapter.GetWinsizeError!Winsize {
+pub fn getSigWinchHook(self: *PosixAdapter) SigwinchHandling.SignalCallback {
+    return SigwinchHandling.SignalCallback{
+        .context = self,
+        .func = setWinsize,
+    };
+}
+
+fn setWinsize(self_ptr: *anyopaque) void {
+    const self: *PosixAdapter = @ptrCast(@alignCast(self_ptr));
+
+    const winsize = getWinsize(self_ptr) catch return;
+
+    self.winsize_mutex.lock();
+    defer self.winsize_mutex.unlock();
+    self.winsize = winsize;
+}
+
+fn getWinsize(self_ptr: *anyopaque) Adapter.GetWinsizeError!Winsize {
     const self: *PosixAdapter = @ptrCast(@alignCast(self_ptr));
 
     var winsize = posix.winsize{
@@ -93,6 +113,18 @@ pub fn getWinsize(self_ptr: *anyopaque) Adapter.GetWinsizeError!Winsize {
 fn read(self_ptr: *anyopaque) Adapter.ReadError!?ReadResult {
     const self: *PosixAdapter = @ptrCast(@alignCast(self_ptr));
 
+    if (self.winsize_mutex.tryLock()) {
+        defer self.winsize_mutex.unlock();
+
+        if (self.winsize) |winsize| {
+            self.winsize = null;
+
+            return ReadResult{
+                .event = .{ .winsize = winsize },
+            };
+        }
+    }
+
     var buf: [4]u8 = undefined;
     const n = posix.read(self.stdin, buf[0..1]) catch |err| switch (err) {
         error.WouldBlock => return null,
@@ -116,7 +148,7 @@ fn read(self_ptr: *anyopaque) Adapter.ReadError!?ReadResult {
     };
 }
 
-pub fn waitForStdinData(self_ptr: *anyopaque, milliseconds: u16) void {
+fn waitForStdinData(self_ptr: *anyopaque, milliseconds: u16) void {
     const self: *PosixAdapter = @ptrCast(@alignCast(self_ptr));
 
     var pollfds = [_]std.posix.pollfd{
@@ -169,6 +201,8 @@ fn disable(self_ptr: *anyopaque) void {
     std.posix.tcsetattr(std.posix.STDIN_FILENO, .FLUSH, termios) catch |err| {
         log.err("failed to disable when setting termios: {s}", .{@errorName(err)});
     };
+
+    self.termios = null;
 }
 
 fn isEnabled(self_ptr: *anyopaque) bool {
