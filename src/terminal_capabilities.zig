@@ -1,14 +1,13 @@
 const std = @import("std");
 const builin = @import("builtin");
 const uucode = @import("uucode");
-const zigwin = @import("zigwin");
-const winconsole = zigwin.system.console;
 
 const ctlseqs = @import("ctlseqs.zig");
 const KittyMultiCursorFlags = ctlseqs.Terminal.KittyMultiCursorFlags;
 const KittyKeyboardFlags = ctlseqs.Terminal.KittyKeyboardFlags;
 const gwidth = @import("gwidth.zig");
 const Key = @import("key.zig");
+const Adapter = @import("adapter.zig");
 
 const COLORTERM_ENV_VAR_NAME = "COLORTERM";
 fn getColorTermW() [:0]const u16 {
@@ -38,13 +37,13 @@ kitty_keyboard: ?KittyKeyboardFlags = null,
 kitty_graphics: bool = false,
 rgb: bool = false,
 
-/// Queries the terminal capabilities and blocks, until primary device attributes response is found.
-pub fn query(stdin: std.fs.File, stdout: std.fs.File, timeout_ms: u32) error{ NoTty, ReadFailed, WriteFailed, EndOfStream }!TerminalCapabilities {
-    if (!stdout.isTty()) return error.NoTty;
+/// Queries the terminal capabilities and blocks, until primary device attributes response is found or we timeout.
+pub fn query(adapter: Adapter, timeout_ms: u32) error{ FailedToEnableAdapter, ReadFailed, EndOfStream, WriteFailed }!TerminalCapabilities {
+    const got_enabled = adapter.enable() catch return error.FailedToEnableAdapter;
+    defer if (got_enabled) adapter.disable();
 
-    var writer_buf: [32]u8 = undefined;
-    var _writer = stdout.writer(&writer_buf);
-    const writer = &_writer.interface;
+    const reader = adapter.getReader();
+    const writer = adapter.getWriter();
 
     try writer.writeAll(ctlseqs.Screen.save ++
         ctlseqs.Cursor.save_position ++ "detecting terminal capabilities...");
@@ -52,7 +51,7 @@ pub fn query(stdin: std.fs.File, stdout: std.fs.File, timeout_ms: u32) error{ No
     try writeQuery(writer);
     try writer.flush();
 
-    const caps = try parseQueryResponses(stdin, timeout_ms);
+    const caps = try parseQueryResponses(reader, timeout_ms);
 
     try writer.writeAll(ctlseqs.Cursor.restore_position ++
         ctlseqs.Erase.line ++ // erase: "detecting terminal capabilities..."
@@ -62,7 +61,7 @@ pub fn query(stdin: std.fs.File, stdout: std.fs.File, timeout_ms: u32) error{ No
     return caps;
 }
 
-pub fn writeQuery(writer: *std.Io.Writer) error{ NoTty, WriteFailed }!void {
+pub fn writeQuery(writer: *std.Io.Writer) error{WriteFailed}!void {
     const queries = ctlseqs.Queries;
 
     try writer.writeAll(queries.decrqm_focus ++
@@ -98,11 +97,7 @@ pub fn writeQuery(writer: *std.Io.Writer) error{ NoTty, WriteFailed }!void {
 /// Recommended to use `query()`.
 ///
 /// TODO: maybe add timeout
-pub fn parseQueryResponses(stdin: std.fs.File, timeout_ms: u32) error{ ReadFailed, EndOfStream }!TerminalCapabilities {
-    var reader_buf: [32]u8 = undefined;
-    var _reader: std.fs.File.Reader = .initStreaming(stdin, &reader_buf);
-    const reader = &_reader.interface;
-
+pub fn parseQueryResponses(stdin: *std.Io.Reader, timeout_ms: u32) error{ ReadFailed, EndOfStream }!TerminalCapabilities {
     var caps: TerminalCapabilities = .{};
 
     {
@@ -135,18 +130,8 @@ pub fn parseQueryResponses(stdin: std.fs.File, timeout_ms: u32) error{ ReadFaile
             break;
         }
 
-        switch (builin.os.tag) {
-            .windows => {
-                buf[i] = try reader.takeByte();
-                i += 1;
-            },
-            else => {
-                i += std.posix.read(stdin.handle, buf[i..]) catch |err| switch (err) {
-                    error.WouldBlock => continue,
-                    else => return error.ReadFailed,
-                };
-            },
-        }
+        buf[i] = try stdin.takeByte();
+        i += 1;
 
         if (i < 2) {
             continue;

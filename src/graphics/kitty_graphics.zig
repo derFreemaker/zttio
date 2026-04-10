@@ -248,7 +248,7 @@ pub fn controlAnimation(writer: *std.Io.Writer, opts: ControlAnimationOptions) s
 
 pub const ControlAnimationOptions = struct {
     id_or_num: IdOrNum,
-    
+
     set_current_frame: ?u32 = null,
     animation_state: ?AnimationState = null,
     loop_state: ?LoopState = null,
@@ -265,15 +265,15 @@ pub fn composeAnimation(writer: *std.Io.Writer, opts: ComposeAnimationOptions) s
 
 pub const ComposeAnimationOptions = struct {
     id_or_num: IdOrNum,
-    
+
     source_frame: u32,
     source_frame_x: ?u32 = null,
     source_frame_y: ?u32 = null,
-    
+
     dest_frame: u32,
     dest_frame_x: ?u32 = null,
     dest_frame_y: ?u32 = null,
-    
+
     replace_frame_pixels: ?bool = null,
 };
 
@@ -420,7 +420,7 @@ pub const AnimationState = enum(u8) {
 pub const LoopState = enum(u32) {
     infinite = 0,
     _,
-    
+
     pub inline fn writeTo(self: *const LoopState, writer: *std.Io.Writer) std.Io.Writer.Error!void {
         try writeFlag(writer, "set_loop_state", @intFromEnum(self.*));
     }
@@ -469,7 +469,7 @@ pub const FlagsMap = std.StaticStringMap(FlagMapping).initComptime(.{
 
     .{ "replace_pixels", FlagMapping{ .bool = 'X' } },
     .{ "background_color_rgba", FlagMapping{ .integer = 'Y' } },
-    
+
     .{ "source_frame", FlagMapping{ .integer = 'r' } },
     .{ "source_frame_x", FlagMapping{ .integer = 'x' } },
     .{ "source_frame_y", FlagMapping{ .integer = 'y' } },

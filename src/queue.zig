@@ -140,17 +140,16 @@ pub fn Queue(comptime T: type, comptime queue_len: usize) type {
             const pop_buf_idx = self.idxIntoBuf(self.pop_idx);
             const push_buf_idx = self.idxIntoBuf(self.push_idx);
 
-            if (pop_buf_idx < push_buf_idx) {
-                // No wrap: all elements are contiguous
-                return .{
-                    .first = self.buf[pop_buf_idx..push_buf_idx],
-                    .second = &[_]T{},
-                };
-            } else {
-                // Wrapped: elements from pop_idx to end, then from start to push_idx
+            // are we wrapping?
+            if (pop_buf_idx >= push_buf_idx) {
                 return .{
                     .first = self.buf[pop_buf_idx..],
                     .second = self.buf[0..push_buf_idx],
+                };
+            } else {
+                return .{
+                    .first = self.buf[pop_buf_idx..push_buf_idx],
+                    .second = &[_]T{},
                 };
             }
         }

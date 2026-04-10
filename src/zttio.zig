@@ -1,21 +1,37 @@
-const std = @import("std");
+const builtin = @import("builtin");
+
+pub const ctlseqs = @import("ctlseqs.zig");
+pub const gwidth = @import("gwidth.zig");
+
+pub const Styling = @import("styling.zig");
+pub const TerminalCapabilities = @import("terminal_capabilities.zig");
+
+pub const Color = @import("color.zig").Color;
+pub const Event = @import("event.zig").Event;
+pub const Key = @import("key.zig");
+pub const Mouse = @import("mouse.zig");
+pub const Winsize = @import("winsize.zig").Winsize;
+
+pub const Adapter = @import("adapter.zig");
+pub const Adapters = struct {
+    pub const NativeAdapter = switch (builtin.os.tag) {
+        .windows => WinAdapter,
+        else => PosixAdapter,
+    };
+
+    pub const PosixAdapter = @import("adapters/posix_adapter.zig");
+    pub const WinAdapter = @import("adapters/win_adapter.zig");
+};
+
+pub const Parser = @import("parser.zig");
+pub const Parsers = struct {
+    pub const NormalParser = @import("parsers/normal_parser.zig");
+    pub const ThreadedParser = @import("parsers/threaded_parser.zig");
+};
+
+pub const Tty = @import("tty.zig");
+
 test {
+    const std = @import("std");
     _ = std.testing.refAllDecls(@This());
 }
-
-const common = @import("common");
-
-pub const ctlseqs = common.ctlseqs;
-pub const gwidth = common.gwidth;
-
-pub const Styling = common.Styling;
-pub const RawMode = common.RawMode;
-pub const TerminalCapabilities = common.TerminalCapabilities;
-
-pub const Color = common.Color;
-pub const Event = common.Event;
-pub const Key = common.Key;
-pub const Mouse = common.Mouse;
-pub const Winsize = common.Winsize;
-
-pub const Tty = @import("tty").Tty;

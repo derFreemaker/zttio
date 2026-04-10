@@ -2,37 +2,86 @@ const std = @import("std");
 const zigwin = @import("zigwin");
 const windows = std.os.windows;
 const winconsole = zigwin.system.console;
-const common = @import("common");
 
-const Key = common.Key;
-const Mouse = common.Mouse;
-const Winsize = common.Winsize;
-const ReadResult = @import("../reader.zig").ReadResult;
+const Key = @import("../key.zig");
+const Mouse = @import("../mouse.zig");
+const Winsize = @import("../winsize.zig").Winsize;
+const Adapter = @import("../adapter.zig");
+const ReadResult = Adapter.ReadResult;
 
-const log = std.log.scoped(.zttio_tty_win_reader);
+const log = std.log.scoped(.zttio_win_adapter);
 
-const WinReader = @This();
+const INPUT_RECORD_BUF_LEN = 16;
+
+const WinAdapter = @This();
 
 stdin: windows.HANDLE,
-stdout: windows.HANDLE,
+stdin_buf: []u8,
+stdin_reader: std.fs.File.Reader,
 
-events: [32]winconsole.INPUT_RECORD = undefined,
+stdout: windows.HANDLE,
+stdout_buf: []u8,
+stdout_writer: std.fs.File.Writer,
+
+events: [INPUT_RECORD_BUF_LEN]winconsole.INPUT_RECORD = undefined,
 events_count: usize = 0,
 events_pos: usize = 0,
 
 last_mouse_button_press: u16 = 0,
 
-pub fn init(stdin: std.fs.File.Handle, stdout: std.fs.File.Handle) WinReader {
-    return WinReader{
-        .stdin = stdin,
-        .stdout = stdout,
+org_state: ?ConsoleMode = null,
+
+pub fn init(allocator: std.mem.Allocator, stdin: std.fs.File, stdout: std.fs.File) error{ OutOfMemory, NoTty }!WinAdapter {
+    if (!stdin.isTty()) return error.NoTty;
+
+    const stdin_buf = try allocator.alloc(u8, 1024);
+    errdefer allocator.free(stdin_buf);
+
+    const stdout_buf = try allocator.alloc(u8, 16 * 1024);
+    errdefer allocator.free(stdout_buf);
+
+    return WinAdapter{
+        .stdin = stdin.handle,
+        .stdin_buf = stdin_buf,
+        .stdin_reader = stdin.readerStreaming(stdin_buf),
+
+        .stdout = stdout.handle,
+        .stdout_buf = stdout_buf,
+        .stdout_writer = stdout.writer(stdout_buf),
     };
 }
 
-pub fn getWinsize(stdout_handle: std.fs.File.Handle) error{Unexpected}!Winsize {
+pub fn deinit(self: *WinAdapter, allocator: std.mem.Allocator) void {
+    allocator.free(self.stdin_buf);
+    allocator.free(self.stdout_buf);
+}
+
+pub fn adapter(self: *WinAdapter) Adapter {
+    return Adapter{
+        .ptr = self,
+        .vtable = &Adapter.VTable{
+            .enable = enable,
+            .disable = disable,
+            .isEnabled = isEnabled,
+
+            .getWinsize = getWinsize,
+
+            .waitForData = waitForStdinData,
+            .read = read,
+
+            .getReader = getReader,
+            .getWriter = getWriter,
+        },
+    };
+}
+
+fn getWinsize(self_ptr: *anyopaque) Adapter.GetWinsizeError!Winsize {
+    const self: *WinAdapter = @ptrCast(@alignCast(self_ptr));
+
     var console_info: winconsole.CONSOLE_SCREEN_BUFFER_INFO = undefined;
-    if (winconsole.GetConsoleScreenBufferInfo(stdout_handle, &console_info) == 0) {
-        return windows.unexpectedError(windows.kernel32.GetLastError());
+    if (winconsole.GetConsoleScreenBufferInfo(self.stdout, &console_info) == 0) {
+        windows.unexpectedError(windows.kernel32.GetLastError()) catch {};
+        return Adapter.GetWinsizeError.Failed;
     }
 
     return Winsize{
@@ -43,7 +92,9 @@ pub fn getWinsize(stdout_handle: std.fs.File.Handle) error{Unexpected}!Winsize {
     };
 }
 
-pub fn next(self: *WinReader) error{ReadFailed}!?ReadResult {
+fn read(self_ptr: *anyopaque) Adapter.ReadError!?ReadResult {
+    const self: *WinAdapter = @ptrCast(@alignCast(self_ptr));
+
     var utf16_buf: [2]u16 = undefined;
     var utf16_half: bool = false;
 
@@ -60,7 +111,7 @@ pub fn next(self: *WinReader) error{ReadFailed}!?ReadResult {
                     utf16_buf[1] = event.uChar.UnicodeChar;
                     const cp: u21 = std.unicode.utf16DecodeSurrogatePair(&utf16_buf) catch unreachable;
 
-                    return ReadResult{ .cp = cp };
+                    return ReadResult{ .codepoint = cp };
                 }
 
                 const base_layout: u16 = switch (event.wVirtualKeyCode) {
@@ -75,7 +126,7 @@ pub fn next(self: *WinReader) error{ReadFailed}!?ReadResult {
                             continue;
                         }
 
-                        return ReadResult{ .cp = event.uChar.UnicodeChar };
+                        return ReadResult{ .codepoint = event.uChar.UnicodeChar };
                     },
                     0x08 => Key.backspace,
                     0x09 => Key.tab,
@@ -186,8 +237,10 @@ pub fn next(self: *WinReader) error{ReadFailed}!?ReadResult {
                     continue;
                 }
 
-                var codepoint: u21 = base_layout;
+                comptime std.debug.assert(4 <= Key.KeyText.MaxShortLength);
                 var text: [4]u8 = std.mem.zeroes([4]u8);
+
+                var codepoint: u21 = base_layout;
                 var len: u3 = 0;
                 switch (event.uChar.UnicodeChar) {
                     0x00...0x1F => {},
@@ -300,7 +353,7 @@ pub fn next(self: *WinReader) error{ReadFailed}!?ReadResult {
                 // NOTE: Even though the event comes with a size, it may not be accurate.
                 // We ask for the size directly when we get this event
                 return ReadResult{
-                    .event = .{ .winsize = getWinsize(self.stdout) catch return error.ReadFailed },
+                    .event = .{ .winsize = getWinsize(self) catch return error.ReadFailed },
                 };
             },
             winconsole.FOCUS_EVENT => {
@@ -327,7 +380,7 @@ inline fn translateMods(mods: u32) Key.Modifiers {
     };
 }
 
-fn peekEvent(self: *WinReader) error{ReadFailed}!?winconsole.INPUT_RECORD {
+fn peekEvent(self: *WinAdapter) error{ReadFailed}!?winconsole.INPUT_RECORD {
     if (self.events_pos >= self.events_count) {
         if (!(self.readNextEvents() catch |err| switch (err) {
             error.Unexpected => return error.ReadFailed,
@@ -339,16 +392,16 @@ fn peekEvent(self: *WinReader) error{ReadFailed}!?winconsole.INPUT_RECORD {
     return self.events[self.events_pos];
 }
 
-inline fn tossEvent(self: *WinReader) void {
+fn tossEvent(self: *WinAdapter) void {
     if (self.events_pos >= self.events_count) return;
     self.events_pos += 1;
 }
 
-inline fn remainingEvents(self: *const WinReader) usize {
+inline fn remainingEvents(self: *const WinAdapter) usize {
     return self.events_count - self.events_pos;
 }
 
-fn readNextEvents(self: *WinReader) error{Unexpected}!bool {
+fn readNextEvents(self: *WinAdapter) error{Unexpected}!bool {
     self.events_count = 0;
     self.events_pos = 0;
 
@@ -359,7 +412,7 @@ fn readNextEvents(self: *WinReader) error{Unexpected}!bool {
     if (numEvents == 0) {
         return false;
     }
-    const events_to_read = @min(numEvents, 32);
+    const events_to_read = @min(numEvents, INPUT_RECORD_BUF_LEN);
 
     if (winconsole.ReadConsoleInputW(self.stdin, &self.events, events_to_read, &numEvents) == 0) {
         return windows.unexpectedError(windows.kernel32.GetLastError());
@@ -369,6 +422,125 @@ fn readNextEvents(self: *WinReader) error{Unexpected}!bool {
     return true;
 }
 
-pub fn waitForStdinData(self: *const WinReader) void {
-    _ = windows.WaitForSingleObject(self.stdin, 20) catch {};
+fn waitForStdinData(self_ptr: *anyopaque, milliseconds: u16) void {
+    const self: *WinAdapter = @ptrCast(@alignCast(self_ptr));
+
+    _ = windows.WaitForSingleObject(self.stdin, milliseconds) catch {};
+}
+
+const ConsoleMode = struct {
+    pub const utf8_codepage: c_uint = 65001;
+
+    codepage: c_uint,
+    input_mode: WIN_CONSOLE_MODE_INPUT,
+    output_mode: WIN_CONSOLE_MODE_OUTPUT,
+};
+
+fn enable(self_ptr: *anyopaque) Adapter.EnableError!bool {
+    const self: *WinAdapter = @ptrCast(@alignCast(self_ptr));
+    if (self.org_state != null) return false;
+
+    const org_codepage = winconsole.GetConsoleOutputCP();
+    const org_input_mode = getConsoleMode(WIN_CONSOLE_MODE_INPUT, self.stdin) catch return Adapter.EnableError.Failed;
+    const org_output_mode = getConsoleMode(WIN_CONSOLE_MODE_OUTPUT, self.stdout) catch return Adapter.EnableError.Failed;
+
+    const org_state = ConsoleMode{
+        .codepage = org_codepage,
+        .input_mode = org_input_mode,
+        .output_mode = org_output_mode,
+    };
+
+    const input_raw_mode: WIN_CONSOLE_MODE_INPUT = .{
+        .WINDOW_INPUT = 1, // resize events
+        .MOUSE_INPUT = 1,
+        .EXTENDED_FLAGS = 1, // allow mouse events
+        .PROCESSED_INPUT = 0,
+        .LINE_INPUT = 0,
+        .ECHO_INPUT = 0,
+        .VIRTUAL_TERMINAL_INPUT = 1,
+    };
+
+    const output_raw_mode: WIN_CONSOLE_MODE_OUTPUT = .{
+        .PROCESSED_OUTPUT = 1,
+        .VIRTUAL_TERMINAL_PROCESSING = 1,
+    };
+
+    setConsoleMode(self.stdin, input_raw_mode) catch return Adapter.EnableError.Failed;
+    setConsoleMode(self.stdout, output_raw_mode) catch return Adapter.EnableError.Failed;
+    if (winconsole.SetConsoleOutputCP(ConsoleMode.utf8_codepage) == 0) {
+        windows.unexpectedError(windows.kernel32.GetLastError()) catch {};
+        return Adapter.EnableError.Failed;
+    }
+
+    self.org_state = org_state;
+    return true;
+}
+
+fn disable(self_ptr: *anyopaque) void {
+    const self: *WinAdapter = @ptrCast(@alignCast(self_ptr));
+    const org_state = self.org_state orelse return;
+    defer self.org_state = null;
+
+    _ = winconsole.SetConsoleOutputCP(org_state.codepage);
+    setConsoleMode(self.stdin, org_state.input_mode) catch {};
+    setConsoleMode(self.stdout, org_state.output_mode) catch {};
+}
+
+fn isEnabled(self_ptr: *anyopaque) bool {
+    const self: *WinAdapter = @ptrCast(@alignCast(self_ptr));
+
+    return self.org_state != null;
+}
+
+/// see: https://learn.microsoft.com/en-us/windows/console/getconsolemode
+const WIN_CONSOLE_MODE_INPUT = packed struct(u32) {
+    PROCESSED_INPUT: u1 = 0,
+    LINE_INPUT: u1 = 0,
+    ECHO_INPUT: u1 = 0,
+    WINDOW_INPUT: u1 = 0,
+    MOUSE_INPUT: u1 = 0,
+    INSERT_MODE: u1 = 0,
+    QUICK_EDIT_MODE: u1 = 0,
+    EXTENDED_FLAGS: u1 = 0,
+    AUTO_POSITION: u1 = 0,
+    VIRTUAL_TERMINAL_INPUT: u1 = 0,
+    _: u22 = 0,
+};
+
+/// see: https://learn.microsoft.com/en-us/windows/console/getconsolemode
+const WIN_CONSOLE_MODE_OUTPUT = packed struct(u32) {
+    PROCESSED_OUTPUT: u1 = 0,
+    WRAP_AT_EOL_OUTPUT: u1 = 0,
+    VIRTUAL_TERMINAL_PROCESSING: u1 = 0,
+    DISABLE_NEWLINE_AUTO_RETURN: u1 = 0,
+    ENABLE_LVB_GRID_WORLDWIDE: u1 = 0,
+    _: u27 = 0,
+};
+
+fn getConsoleMode(comptime T: type, handle: std.os.windows.HANDLE) !T {
+    var mode: u32 = undefined;
+    if (winconsole.GetConsoleMode(handle, @ptrCast(&mode)) == 0) return switch (windows.kernel32.GetLastError()) {
+        .INVALID_HANDLE => error.InvalidHandle,
+        else => |e| windows.unexpectedError(e),
+    };
+    return @bitCast(mode);
+}
+
+fn setConsoleMode(handle: std.os.windows.HANDLE, mode: anytype) !void {
+    if (winconsole.SetConsoleMode(handle, @bitCast(mode)) == 0) return switch (windows.kernel32.GetLastError()) {
+        .INVALID_HANDLE => error.InvalidHandle,
+        else => |e| windows.unexpectedError(e),
+    };
+}
+
+fn getReader(self_ptr: *anyopaque) *std.Io.Reader {
+    const self: *WinAdapter = @ptrCast(@alignCast(self_ptr));
+
+    return &self.stdin_reader.interface;
+}
+
+fn getWriter(self_ptr: *anyopaque) *std.Io.Writer {
+    const self: *WinAdapter = @ptrCast(@alignCast(self_ptr));
+
+    return &self.stdout_writer.interface;
 }

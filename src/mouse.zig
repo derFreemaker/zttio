@@ -1,4 +1,4 @@
-pub const Mouse = @This();
+const Mouse = @This();
 
 col: i16,
 row: i16,

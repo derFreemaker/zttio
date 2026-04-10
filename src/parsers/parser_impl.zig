@@ -24,14 +24,13 @@
 
 const std = @import("std");
 const uucode = @import("uucode");
-const common = @import("common");
 
-const Color = common.Color;
-const Event = common.Event;
-const Key = common.Key;
-const Mouse = common.Mouse;
-const Winsize = common.Winsize;
-const ctlseqs = common.ctlseqs;
+const Color = @import("../color.zig").Color;
+const Event = @import("../event.zig").Event;
+const Key = @import("../key.zig");
+const Mouse = @import("../mouse.zig");
+const Winsize = @import("../winsize.zig").Winsize;
+const ctlseqs = @import("../ctlseqs.zig");
 const MultiCursor = ctlseqs.MultiCursor;
 const KittyGraphics = ctlseqs.KittyGraphics;
 
