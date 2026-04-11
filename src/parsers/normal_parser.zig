@@ -5,7 +5,7 @@ const uucode = @import("uucode");
 const Event = @import("../event.zig").Event;
 const Winsize = @import("../winsize.zig").Winsize;
 const Queue = @import("../queue.zig");
-const ParserImpl = @import("parser_impl.zig");
+const ParserImpl = @import("parser.zig");
 const Adapter = @import("../adapter.zig");
 const ReadResult = Adapter.ReadResult;
 const Parser = @import("../parser.zig");
@@ -177,7 +177,7 @@ fn parseBuf(self: *NormalParser, token_remaining: RemainingToken) ParseError!?Ev
         }
     }
 
-    const result = try self.parser_impl.parse(self.buf.items);
+    const result = self.parser_impl.parse(self.buf.items) catch return error.ParseFailed;
     defer {
         if (result.parse != .none and result.n > 0) {
             @memmove(self.buf.items[0 .. self.buf.items.len - result.n], self.buf.items[result.n..]);

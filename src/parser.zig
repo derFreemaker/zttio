@@ -2,12 +2,11 @@ const std = @import("std");
 
 const Event = @import("event.zig").Event;
 const Winsize = @import("winsize.zig").Winsize;
-const ParserImpl = @import("parsers/parser_impl.zig");
 const Adapter = @import("adapter.zig");
 
 pub const EnableError = error{Failed};
 pub const GetWinsizeError = error{Failed};
-pub const ParseError = ParserImpl.ParseError || Adapter.ReadError || std.mem.Allocator.Error;
+pub const ParseError = error{ParseFailed} || Adapter.ReadError || std.mem.Allocator.Error;
 
 const Parser = @This();
 
