@@ -1,7 +1,7 @@
 const std = @import("std");
-const zigwin = @import("zigwin");
+const win32 = @import("win32");
 const windows = std.os.windows;
-const winconsole = zigwin.system.console;
+const winconsole = win32.system.console;
 
 const Key = @import("../key.zig");
 const Mouse = @import("../mouse.zig");
@@ -17,11 +17,11 @@ const WinAdapter = @This();
 
 stdin: windows.HANDLE,
 stdin_buf: []u8,
-stdin_reader: std.fs.File.Reader,
+stdin_reader: std.Io.File.Reader,
 
 stdout: windows.HANDLE,
 stdout_buf: []u8,
-stdout_writer: std.fs.File.Writer,
+stdout_writer: std.Io.File.Writer,
 
 events: [INPUT_RECORD_BUF_LEN]winconsole.INPUT_RECORD = undefined,
 events_count: usize = 0,
@@ -31,8 +31,8 @@ last_mouse_button_press: u16 = 0,
 
 org_state: ?ConsoleMode = null,
 
-pub fn init(allocator: std.mem.Allocator, stdin: std.fs.File, stdout: std.fs.File) error{ OutOfMemory, NoTty }!WinAdapter {
-    if (!stdin.isTty()) return error.NoTty;
+pub fn init(allocator: std.mem.Allocator, io: std.Io, stdin: std.Io.File, stdout: std.Io.File) error{ OutOfMemory, NoTty }!WinAdapter {
+    if (!(stdin.isTty(io) catch false)) return error.NoTty;
 
     const stdin_buf = try allocator.alloc(u8, 1024);
     errdefer allocator.free(stdin_buf);
@@ -43,11 +43,11 @@ pub fn init(allocator: std.mem.Allocator, stdin: std.fs.File, stdout: std.fs.Fil
     return WinAdapter{
         .stdin = stdin.handle,
         .stdin_buf = stdin_buf,
-        .stdin_reader = stdin.readerStreaming(stdin_buf),
+        .stdin_reader = stdin.readerStreaming(io, stdin_buf),
 
         .stdout = stdout.handle,
         .stdout_buf = stdout_buf,
-        .stdout_writer = stdout.writer(stdout_buf),
+        .stdout_writer = stdout.writer(io, stdout_buf),
     };
 }
 
@@ -80,7 +80,7 @@ fn getWinsize(self_ptr: *anyopaque) Adapter.GetWinsizeError!Winsize {
 
     var console_info: winconsole.CONSOLE_SCREEN_BUFFER_INFO = undefined;
     if (winconsole.GetConsoleScreenBufferInfo(self.stdout, &console_info) == 0) {
-        windows.unexpectedError(windows.kernel32.GetLastError()) catch {};
+        windows.unexpectedError(windows.GetLastError()) catch {};
         return Adapter.GetWinsizeError.Failed;
     }
 
@@ -407,7 +407,7 @@ fn readNextEvents(self: *WinAdapter) error{Unexpected}!bool {
 
     var numEvents: u32 = 0;
     if (winconsole.GetNumberOfConsoleInputEvents(self.stdin, &numEvents) == 0) {
-        return windows.unexpectedError(windows.kernel32.GetLastError());
+        return windows.unexpectedError(windows.GetLastError());
     }
     if (numEvents == 0) {
         return false;
@@ -415,7 +415,7 @@ fn readNextEvents(self: *WinAdapter) error{Unexpected}!bool {
     const events_to_read = @min(numEvents, INPUT_RECORD_BUF_LEN);
 
     if (winconsole.ReadConsoleInputW(self.stdin, &self.events, events_to_read, &numEvents) == 0) {
-        return windows.unexpectedError(windows.kernel32.GetLastError());
+        return windows.unexpectedError(windows.GetLastError());
     }
     self.events_count = numEvents;
 
@@ -425,7 +425,9 @@ fn readNextEvents(self: *WinAdapter) error{Unexpected}!bool {
 fn waitForStdinData(self_ptr: *anyopaque, milliseconds: u16) void {
     const self: *WinAdapter = @ptrCast(@alignCast(self_ptr));
 
-    _ = windows.WaitForSingleObject(self.stdin, milliseconds) catch {};
+    const timeout: i64 = milliseconds;
+    // @Check
+    _ = windows.ntdll.NtWaitForSingleObject(self.stdin, .TRUE, &timeout);
 }
 
 const ConsoleMode = struct {
@@ -468,7 +470,7 @@ fn enable(self_ptr: *anyopaque) Adapter.EnableError!bool {
     setConsoleMode(self.stdin, input_raw_mode) catch return Adapter.EnableError.Failed;
     setConsoleMode(self.stdout, output_raw_mode) catch return Adapter.EnableError.Failed;
     if (winconsole.SetConsoleOutputCP(ConsoleMode.utf8_codepage) == 0) {
-        windows.unexpectedError(windows.kernel32.GetLastError()) catch {};
+        windows.unexpectedError(windows.GetLastError()) catch {};
         return Adapter.EnableError.Failed;
     }
 
@@ -519,7 +521,7 @@ const WIN_CONSOLE_MODE_OUTPUT = packed struct(u32) {
 
 fn getConsoleMode(comptime T: type, handle: std.os.windows.HANDLE) !T {
     var mode: u32 = undefined;
-    if (winconsole.GetConsoleMode(handle, @ptrCast(&mode)) == 0) return switch (windows.kernel32.GetLastError()) {
+    if (winconsole.GetConsoleMode(handle, @ptrCast(&mode)) == 0) return switch (windows.GetLastError()) {
         .INVALID_HANDLE => error.InvalidHandle,
         else => |e| windows.unexpectedError(e),
     };
@@ -527,7 +529,7 @@ fn getConsoleMode(comptime T: type, handle: std.os.windows.HANDLE) !T {
 }
 
 fn setConsoleMode(handle: std.os.windows.HANDLE, mode: anytype) !void {
-    if (winconsole.SetConsoleMode(handle, @bitCast(mode)) == 0) return switch (windows.kernel32.GetLastError()) {
+    if (winconsole.SetConsoleMode(handle, @bitCast(mode)) == 0) return switch (windows.GetLastError()) {
         .INVALID_HANDLE => error.InvalidHandle,
         else => |e| windows.unexpectedError(e),
     };

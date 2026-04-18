@@ -11,11 +11,11 @@ pub fn build(b: *std.Build) void {
     });
     const uucode_mod = uucode_dep.module("uucode");
 
-    const zigimg_dep = b.dependency("zigimg", .{
-        .target = target,
-        .optimize = optimize,
-    });
-    const zigimg_mod = zigimg_dep.module("zigimg");
+    // const zigimg_dep = b.dependency("zigimg", .{
+    //     .target = target,
+    //     .optimize = optimize,
+    // });
+    // const zigimg_mod = zigimg_dep.module("zigimg");
 
     const zttio_mod = b.addModule("zttio", .{
         .target = target,
@@ -25,15 +25,14 @@ pub fn build(b: *std.Build) void {
 
         .imports = &.{
             .{ .name = "uucode", .module = uucode_mod },
-            .{ .name = "zigimg", .module = zigimg_mod },
+            // .{ .name = "zigimg", .module = zigimg_mod },
         },
     });
     if (target.result.os.tag == .windows) {
-        if (b.lazyDependency("zigwin32", .{})) |zigwin32| {
-            const mod = zigwin32.module("win32");
+        if (b.lazyDependency("win32", .{})) |win32| {
+            const mod = win32.module("win32");
 
-            zttio_mod.addImport("zigwin", mod);
-            zttio_mod.addImport("zigwin", mod);
+            zttio_mod.addImport("win32", mod);
         }
     }
 

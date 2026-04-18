@@ -1,6 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
+const Adapter = @import("adapter.zig");
 const ctlseqs = @import("ctlseqs.zig");
 const KittyGraphics = ctlseqs.KittyGraphics;
 const GraphicsSource = @import("graphics/source.zig").Source;
@@ -27,7 +28,7 @@ caps: TerminalCapabilities,
 
 winsize: Winsize,
 
-pub fn init(allocator: std.mem.Allocator, parser: Parser, opts: CreateOptions) error{ UnableToEnableReader, UnableToGetWinsize, WriteFailed }!Tty {
+pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, adapter: Adapter, opts: CreateOptions) error{ UnableToEnableReader, UnableToGetWinsize, WriteFailed }!Tty {
     // switch (builtin.os.tag) {
     //     .windows => {},
     //     else => {
@@ -46,11 +47,11 @@ pub fn init(allocator: std.mem.Allocator, parser: Parser, opts: CreateOptions) e
     //     },
     // }
 
-    _ = parser.enable() catch return error.UnableToEnableReader;
+    _ = adapter.enable() catch return error.UnableToEnableReader;
 
-    const winsize = parser.getWinsize() catch return error.UnableToGetWinsize;
+    const winsize = adapter.getWinsize() catch return error.UnableToGetWinsize;
 
-    const writer = parser.getWriter();
+    const writer = adapter.getWriter();
 
     try writer.writeAll(ctlseqs.Terminal.braketed_paste_set);
 
@@ -74,7 +75,11 @@ pub fn init(allocator: std.mem.Allocator, parser: Parser, opts: CreateOptions) e
         .allocator = allocator,
 
         .writer = writer,
-        .parser = parser,
+        .parser = .init(
+            allocator,
+            event_allocator,
+            adapter,
+        ),
 
         .opts = Options{
             .kitty_keyboard_flags = opts.kitty_keyboard_flags,
@@ -86,7 +91,7 @@ pub fn init(allocator: std.mem.Allocator, parser: Parser, opts: CreateOptions) e
 }
 
 pub fn deinit(self: *Tty) void {
-    self.parser.disable();
+    self.parser.deinit();
 
     if (self.caps.kitty_keyboard) |detail| {
         ctlseqs.Terminal.setKittyKeyboardHandling(self.writer, detail) catch {};
@@ -406,42 +411,42 @@ pub fn requestMultiCursorsColor(self: *Tty) HelperError!void {
     return self.writer.writeAll(ctlseqs.MultiCursor.QUERY_CURRENT_CURSORS_COLOR);
 }
 
-const KittyHelperTransmitError = KittyGraphics.Error || HelperError;
+// const KittyHelperTransmitError = KittyGraphics.Error || HelperError;
 
-pub fn transmitImageKitty(self: *Tty, source: GraphicsSource, opts: KittyGraphics.TransmitOnlyOptions) KittyHelperTransmitError!void {
-    if (!self.caps.kitty_graphics) return error.CapabilityNotSupported;
-    return KittyGraphics.transmitOnly(self.writer, self.allocator, source, opts);
-}
+// pub fn transmitImageKitty(self: *Tty, source: GraphicsSource, opts: KittyGraphics.TransmitOnlyOptions) KittyHelperTransmitError!void {
+//     if (!self.caps.kitty_graphics) return error.CapabilityNotSupported;
+//     return KittyGraphics.transmitOnly(self.writer, self.allocator, source, opts);
+// }
 
-pub fn transmitAndDisplayImageKitty(self: *Tty, source: GraphicsSource, opts: KittyGraphics.TransmitAndDisplayOptions) KittyHelperTransmitError!void {
-    if (!self.caps.kitty_graphics) return error.CapabilityNotSupported;
-    return KittyGraphics.transmitAndDisplay(self.writer, self.allocator, source, opts);
-}
+// pub fn transmitAndDisplayImageKitty(self: *Tty, source: GraphicsSource, opts: KittyGraphics.TransmitAndDisplayOptions) KittyHelperTransmitError!void {
+//     if (!self.caps.kitty_graphics) return error.CapabilityNotSupported;
+//     return KittyGraphics.transmitAndDisplay(self.writer, self.allocator, source, opts);
+// }
 
-pub fn displayImageKitty(self: *Tty, opts: KittyGraphics.DisplayOnlyOptions) HelperError!void {
-    if (!self.caps.kitty_graphics) return error.CapabilityNotSupported;
-    return KittyGraphics.display(self.writer, opts);
-}
+// pub fn displayImageKitty(self: *Tty, opts: KittyGraphics.DisplayOnlyOptions) HelperError!void {
+//     if (!self.caps.kitty_graphics) return error.CapabilityNotSupported;
+//     return KittyGraphics.display(self.writer, opts);
+// }
 
-pub fn eraseImageKitty(self: *Tty, opts: KittyGraphics.EraseOptions) HelperError!void {
-    if (!self.caps.kitty_graphics) return error.CapabilityNotSupported;
-    return KittyGraphics.erase(self.writer, opts);
-}
+// pub fn eraseImageKitty(self: *Tty, opts: KittyGraphics.EraseOptions) HelperError!void {
+//     if (!self.caps.kitty_graphics) return error.CapabilityNotSupported;
+//     return KittyGraphics.erase(self.writer, opts);
+// }
 
-pub fn transmitAnimationFrameKitty(self: *Tty, opts: KittyGraphics.TransmitAnimationFrameOptions) KittyHelperTransmitError!void {
-    if (!self.caps.kitty_graphics) return error.CapabilityNotSupported;
-    return KittyGraphics.transmitAnimationFrame(self.writer, self.allocator, opts);
-}
+// pub fn transmitAnimationFrameKitty(self: *Tty, opts: KittyGraphics.TransmitAnimationFrameOptions) KittyHelperTransmitError!void {
+//     if (!self.caps.kitty_graphics) return error.CapabilityNotSupported;
+//     return KittyGraphics.transmitAnimationFrame(self.writer, self.allocator, opts);
+// }
 
-pub fn controlAnimationKitty(self: *Tty, opts: KittyGraphics.ControlAnimationOptions) HelperError!void {
-    if (!self.caps.kitty_graphics) return error.CapabilityNotSupported;
-    return KittyGraphics.controlAnimation(self.writer, opts);
-}
+// pub fn controlAnimationKitty(self: *Tty, opts: KittyGraphics.ControlAnimationOptions) HelperError!void {
+//     if (!self.caps.kitty_graphics) return error.CapabilityNotSupported;
+//     return KittyGraphics.controlAnimation(self.writer, opts);
+// }
 
-pub fn composeAnimationKitty(self: *Tty, opts: KittyGraphics.ComposeAnimationOptions) HelperError!void {
-    if (!self.caps.kitty_graphics) return error.CapabilityNotSupported;
-    return KittyGraphics.composeAnimation(self.writer, opts);
-}
+// pub fn composeAnimationKitty(self: *Tty, opts: KittyGraphics.ComposeAnimationOptions) HelperError!void {
+//     if (!self.caps.kitty_graphics) return error.CapabilityNotSupported;
+//     return KittyGraphics.composeAnimation(self.writer, opts);
+// }
 
 pub const MoveCursor = union(enum) {
     home,
@@ -483,8 +488,3 @@ pub const TtyConfig = struct {
     /// If `true` runs the parser for incoming data in its own thread.
     run_own_thread: bool = false,
 };
-
-test {
-    @setEvalBranchQuota(1_000_000);
-    _ = std.testing.refAllDeclsRecursive(@This());
-}

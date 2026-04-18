@@ -10,17 +10,6 @@ const Key = @import("key.zig");
 const Adapter = @import("adapter.zig");
 
 const COLORTERM_ENV_VAR_NAME = "COLORTERM";
-fn getColorTermW() [:0]const u16 {
-    const static = struct {
-        var buf: [COLORTERM_ENV_VAR_NAME.len + 1:0]u16 = blk: {
-            var b: [COLORTERM_ENV_VAR_NAME.len + 1:0]u16 = undefined;
-            const n = std.unicode.wtf8ToWtf16Le(&b, COLORTERM_ENV_VAR_NAME) catch unreachable;
-            b[n] = 0;
-            break :blk b;
-        };
-    };
-    return &static.buf;
-}
 
 const TerminalCapabilities = @This();
 
@@ -38,7 +27,7 @@ kitty_graphics: bool = false,
 rgb: bool = false,
 
 /// Queries the terminal capabilities and blocks, until primary device attributes response is found or we timeout.
-pub fn query(adapter: Adapter, timeout_ms: u32) error{ FailedToEnableAdapter, ReadFailed, EndOfStream, WriteFailed }!TerminalCapabilities {
+pub fn query(io: std.Io, env_map: *const std.process.Environ.Map, adapter: Adapter, timeout: std.Io.Duration) error{ FailedToEnableAdapter, ReadFailed, EndOfStream, WriteFailed }!TerminalCapabilities {
     const got_enabled = adapter.enable() catch return error.FailedToEnableAdapter;
     defer if (got_enabled) adapter.disable();
 
@@ -51,7 +40,7 @@ pub fn query(adapter: Adapter, timeout_ms: u32) error{ FailedToEnableAdapter, Re
     try writeQuery(writer);
     try writer.flush();
 
-    const caps = try parseQueryResponses(reader, timeout_ms);
+    const caps = try parseQueryResponses(io, env_map, reader, timeout);
 
     try writer.writeAll(ctlseqs.Cursor.restore_position ++
         ctlseqs.Erase.line ++ // erase: "detecting terminal capabilities..."
@@ -97,36 +86,24 @@ pub fn writeQuery(writer: *std.Io.Writer) error{WriteFailed}!void {
 /// Recommended to use `query()`.
 ///
 /// TODO: maybe add timeout
-pub fn parseQueryResponses(stdin: *std.Io.Reader, timeout_ms: u32) error{ ReadFailed, EndOfStream }!TerminalCapabilities {
+pub fn parseQueryResponses(io: std.Io, env_map: *const std.process.Environ.Map, stdin: *std.Io.Reader, timeout: std.Io.Duration) error{ ReadFailed, EndOfStream }!TerminalCapabilities {
     var caps: TerminalCapabilities = .{};
 
-    {
-        if (builin.os.tag == .windows) {
-            const colorterm = std.process.getenvW(getColorTermW());
-            if (colorterm) |term| {
-                if (std.mem.eql(u16, term, &.{ 't', 'r', 'u', 'e', 'c', 'o', 'l', 'o', 'r' }) or
-                    std.mem.eql(u16, term, &.{ '2', '4', 'b', 'i', 't' }))
-                {
-                    caps.rgb = true;
-                }
-            }
-        } else {
-            const colorterm = std.posix.getenv(COLORTERM_ENV_VAR_NAME);
-            if (colorterm) |term| {
-                if (std.mem.eql(u8, term, "truecolor") or
-                    std.mem.eql(u8, term, "24bit"))
-                {
-                    caps.rgb = true;
-                }
-            }
+    const colorterm = env_map.get(COLORTERM_ENV_VAR_NAME);
+    if (colorterm) |term| {
+        if (std.mem.eql(u8, term, "truecolor") or
+            std.mem.eql(u8, term, "24bit"))
+        {
+            caps.rgb = true;
         }
     }
 
-    const end_ms = std.time.milliTimestamp() + timeout_ms;
+    const end_ms = std.Io.Timestamp.now(io, .cpu_process).addDuration(timeout);
     var buf: [256]u8 = undefined;
     var i: usize = 0;
     while (true) {
-        if (end_ms < std.time.milliTimestamp()) {
+        const now = std.Io.Timestamp.now(io, .cpu_process);
+        if (end_ms.nanoseconds < now.nanoseconds) {
             break;
         }
 
@@ -457,8 +434,7 @@ inline fn parseGround(input: []const u8) ParseResult {
             var grapheme_iter = uucode.grapheme.Iterator(uucode.utf8.Iterator).init(.init(input));
             var grapheme_len: usize = 0;
             var cp_count: usize = 0;
-
-            while (grapheme_iter.next()) |result| {
+            while (grapheme_iter.nextCodePoint()) |result| {
                 cp_count += 1;
                 if (result.is_break) {
                     // Found the first grapheme boundary

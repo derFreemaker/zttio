@@ -13,7 +13,7 @@ pub fn testPanic(msg: []const u8, ret_addr: ?usize) noreturn {
     std.debug.defaultPanic(msg, ret_addr);
 }
 
-pub fn main() !u8 {
+pub fn main(init: std.process.Init) !u8 {
     if (comptime builtin.os.tag != .windows) zttio.SigwinchHandling.setSignalHandler();
     defer if (comptime builtin.os.tag != .windows) zttio.SigwinchHandling.resetSignalHandler();
 
@@ -26,21 +26,16 @@ pub fn main() !u8 {
     const allocator = gpa.allocator();
     const event_allocator = allocator;
 
-    const stdin: std.fs.File = .stdin();
-    const stdout: std.fs.File = .stdout();
+    const stdin: std.Io.File = .stdin();
+    const stdout: std.Io.File = .stdout();
 
-    var native_adapter = try zttio.Adapters.NativeAdapter.init(allocator, stdin, stdout);
+    var native_adapter = try zttio.Adapters.NativeAdapter.init(allocator, init.io, stdin, stdout);
     defer native_adapter.deinit(allocator);
     if (comptime builtin.os.tag != .windows) try zttio.SigwinchHandling.notifyWinsize(native_adapter.getSigWinchHook());
     defer if (comptime builtin.os.tag != .windows) zttio.SigwinchHandling.removeNotifyWinsize(&native_adapter);
 
-    var parser = zttio.Parsers.NormalParser.init(allocator, event_allocator, native_adapter.adapter());
-    defer parser.deinit();
-    var threaded = try zttio.Parsers.ThreadedParser.init(allocator, parser.parser());
-    defer threaded.deinit(event_allocator);
-
-    var tty = try zttio.Tty.init(allocator, threaded.parser(), .{
-        .caps = try .query(native_adapter.adapter(), 100),
+    var tty = try zttio.Tty.init(allocator, event_allocator, native_adapter.adapter(), .{
+        .caps = try .query(init.io, init.environ_map, native_adapter.adapter(), .fromMilliseconds(100)),
     });
     global_tty = &tty;
     defer {

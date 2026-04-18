@@ -73,3 +73,37 @@ pub inline fn getReader(self: Adapter) *std.Io.Reader {
 pub inline fn getWriter(self: Adapter) *std.Io.Writer {
     return self.vtable.getWriter(self.ptr);
 }
+
+pub fn noEnable(self_ptr: *anyopaque) EnableError!bool {
+    _ = self_ptr;
+    return false;
+}
+
+pub fn noDisable(self_ptr: *anyopaque) void {
+    _ = self_ptr;
+}
+
+pub fn neverEnabled(self_ptr: *anyopaque) bool {
+    _ = self_ptr;
+    return false;
+}
+
+pub fn fixedWinsize(comptime winsize: ?Winsize) fn (self_ptr: *anyopaque) GetWinsizeError!Winsize {
+    return struct {
+        pub fn func(self_ptr: *anyopaque) GetWinsizeError!Winsize {
+            _ = self_ptr;
+            return comptime winsize orelse Winsize{
+                .cols = 0,
+                .rows = 0,
+                .x_pixel = 0,
+                .y_pixel = 0,
+            };
+        }
+    }.func;
+}
+
+pub fn noWaitForData(self_ptr: *anyopaque, milliseconds: u16) bool {
+    _ = self_ptr;
+    _ = milliseconds;
+    return false;
+}

@@ -24,15 +24,15 @@ pub const Adapters = struct {
     pub const WinAdapter = @import("adapters/win_adapter.zig");
 };
 
-pub const Parser = @import("parser.zig");
-pub const Parsers = struct {
-    pub const NormalParser = @import("parsers/normal_parser.zig");
-    pub const ThreadedParser = @import("parsers/threaded_parser.zig");
-};
-
 pub const Tty = @import("tty.zig");
 
 test {
+    _ = @import("color.zig");
+    _ = @import("key.zig");
+    _ = @import("list_separator.zig");
+    _ = @import("terminal_capabilities.zig");
+    _ = @import("parser.zig");
+
     const std = @import("std");
     _ = std.testing.refAllDecls(@This());
 }

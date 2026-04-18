@@ -13,19 +13,19 @@ const PosixAdapter = @This();
 
 stdin: std.posix.fd_t,
 stdin_buf: []u8,
-stdin_reader: std.fs.File.Reader,
+stdin_reader: std.Io.File.Reader,
 
 stdout: std.posix.fd_t,
 stdout_buf: []u8,
-stdout_writer: std.fs.File.Writer,
+stdout_writer: std.Io.File.Writer,
 
 termios: ?posix.termios = null,
 
 winsize_mutex: std.Thread.Mutex = .{},
 winsize: ?Winsize = null,
 
-pub fn init(allocator: std.mem.Allocator, stdin: std.fs.File, stdout: std.fs.File) error{ OutOfMemory, NoTty }!PosixAdapter {
-    if (!stdout.isTty()) return error.NoTty;
+pub fn init(allocator: std.mem.Allocator, io: std.Io, stdin: std.Io.File, stdout: std.Io.File) error{ OutOfMemory, NoTty }!PosixAdapter {
+    if (!stdout.isTty(io) catch false) return error.NoTty;
 
     const stdin_buf = try allocator.alloc(u8, 1024);
     errdefer allocator.free(stdin_buf);
