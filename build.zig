@@ -44,21 +44,24 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_zttio_tests.step);
 
-    if (b.option(bool, "examples", "build examples") orelse false) {
-        const simple_example_exe = b.addExecutable(.{
-            .name = "simple_example",
-            .root_module = b.createModule(.{
-                .target = target,
-                .optimize = optimize,
+    const basic_example_exe = b.addExecutable(.{
+        .name = "basic_example",
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
 
-                .root_source_file = b.path("examples/simple.zig"),
+            .root_source_file = b.path("examples/basic.zig"),
 
-                .imports = &.{
-                    .{ .name = "zttio", .module = zttio_mod },
-                },
-            }),
-        });
-
-        b.installArtifact(simple_example_exe);
+            .imports = &.{
+                .{ .name = "zttio", .module = zttio_mod },
+            },
+        }),
+    });
+    const basic_example_run_step = b.step("run-basic-example", "run basic example");
+    const basic_example_cmd = b.addRunArtifact(basic_example_exe);
+    basic_example_run_step.dependOn(&basic_example_cmd.step);
+    basic_example_cmd.step.dependOn(&basic_example_exe.step);
+    if (b.args) |args| {
+        basic_example_cmd.addArgs(args);
     }
 }
