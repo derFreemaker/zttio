@@ -1,7 +1,7 @@
 const Mouse = @This();
 
-col: i16,
-row: i16,
+col: u16,
+row: u16,
 xoffset: u16 = 0,
 yoffset: u16 = 0,
 button: Button,

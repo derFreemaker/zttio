@@ -873,8 +873,8 @@ inline fn parseMouse(input: []const u8, full_input: []const u8) ParseResult {
     const skip: ParseResult = .skip(input.len);
 
     var button_mask: u16 = undefined;
-    var px: i16 = undefined;
-    var py: i16 = undefined;
+    var px: u16 = undefined;
+    var py: u16 = undefined;
     var xterm: bool = undefined;
     if (input.len == 3 and input[2] == 'M' and full_input.len >= 6) {
         xterm = true;
@@ -886,8 +886,8 @@ inline fn parseMouse(input: []const u8, full_input: []const u8) ParseResult {
         const delim1 = std.mem.indexOfScalarPos(u8, input, 3, ';') orelse return skip;
         button_mask = parseParam(u16, input[3..delim1], null) orelse return skip;
         const delim2 = std.mem.indexOfScalarPos(u8, input, delim1 + 1, ';') orelse return skip;
-        px = parseParam(i16, input[delim1 + 1 .. delim2], 1) orelse return skip;
-        py = parseParam(i16, input[delim2 + 1 .. input.len - 1], 1) orelse return skip;
+        px = parseParam(u16, input[delim1 + 1 .. delim2], 1) orelse return skip;
+        py = parseParam(u16, input[delim2 + 1 .. input.len - 1], 1) orelse return skip;
     } else {
         return skip;
     }
@@ -1358,16 +1358,7 @@ test "parse(CSI): mouse (negative)" {
     const input = ctlseqs.CSI ++ "<35;-50;-100m";
     const result = try parse(arena.allocator(), input);
 
-    const expected: ParseResult = .{
-        .parse = .{ .event = .{ .mouse = .{
-            .col = -51,
-            .row = -101,
-            .button = .none,
-            .type = .motion,
-            .mods = .{},
-        } } },
-        .n = input.len,
-    };
+    const expected: ParseResult = .skip(input.len);
 
     try testing.expectEqual(expected.n, result.n);
     try testing.expectEqual(expected.parse, result.parse);
@@ -1399,7 +1390,7 @@ test "parse(CSI): mouse (URXVT)" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
 
-    const input = ctlseqs.CSI ++ "35;-50;100m";
+    const input = ctlseqs.CSI ++ "35;50;100m";
     const result = try parse(arena.allocator(), input);
 
     const expected: ParseResult = .skip(input.len);

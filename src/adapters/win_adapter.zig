@@ -341,8 +341,8 @@ fn read(self_ptr: *anyopaque) Adapter.ReadError!?ReadResult {
                 };
 
                 const mouse: Mouse = .{
-                    .col = @as(i16, @bitCast(event.dwMousePosition.X)), // Windows reports with 0 index
-                    .row = @as(i16, @bitCast(event.dwMousePosition.Y)), // Windows reports with 0 index
+                    .col = @intCast(event.dwMousePosition.X), // Windows reports with 0 index
+                    .row = @intCast(event.dwMousePosition.Y), // Windows reports with 0 index
                     .mods = mods,
                     .type = event_type,
                     .button = btn,
