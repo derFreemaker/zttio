@@ -1,5 +1,4 @@
 const std = @import("std");
-const builin = @import("builtin");
 const uucode = @import("uucode");
 
 const ctlseqs = @import("ctlseqs.zig");
@@ -68,7 +67,7 @@ pub fn writeQuery(writer: *std.Io.Writer) error{WriteFailed}!void {
         queries.explicit_width ++
         ctlseqs.Cursor.position_request ++
 
-        // Scaled text query. We send the cursor home, then do an scaled text command, then
+        // Scaled text query. We send the cursor home, then do a scaled text command, then
         // query the position. If the parsed value is an F3 with al, we support scaled text.
         // The returned response will be something like \x1b[1;3R...which when parsed as a Key is a
         // alt + F3 (the row is ignored). We only care if the column has moved from 1->3, which is
@@ -84,8 +83,6 @@ pub fn writeQuery(writer: *std.Io.Writer) error{WriteFailed}!void {
 
 /// Will block until the primary device attributes are found.
 /// Recommended to use `query()`.
-///
-/// TODO: maybe add timeout
 pub fn parseQueryResponses(io: std.Io, env_map: *const std.process.Environ.Map, stdin: *std.Io.Reader, timeout: std.Io.Duration) error{ ReadFailed, EndOfStream }!TerminalCapabilities {
     var caps: TerminalCapabilities = .{};
 
@@ -99,15 +96,23 @@ pub fn parseQueryResponses(io: std.Io, env_map: *const std.process.Environ.Map, 
     }
 
     const end_ms = std.Io.Timestamp.now(io, .cpu_process).addDuration(timeout);
-    var buf: [256]u8 = undefined;
+    var buf: [1024]u8 = undefined;
     var i: usize = 0;
     while (true) {
+        if (i >= buf.len) {
+            return error.ReadFailed;
+        }
+
         const now = std.Io.Timestamp.now(io, .cpu_process);
         if (end_ms.nanoseconds < now.nanoseconds) {
             break;
         }
 
-        buf[i] = try stdin.takeByte();
+        buf[i] = stdin.takeByte() catch {
+            // catch EndOfStream, since we use non-blocking I/O
+            io.sleep(.fromMicroseconds(10), .awake) catch {};
+            continue;
+        };
         i += 1;
 
         if (i < 2) {
@@ -182,20 +187,12 @@ inline fn parseSs3(input: []const u8) ParseResult {
     return .consume(3);
 }
 
+/// Skips sequences until we see an ST (String Terminator, ESC \)
 inline fn skipUntilST(input: []const u8) ParseResult {
     if (input.len < 3) return .none;
 
-    var chunker = std.mem.window(u8, input[2..], 2, 1);
-    while (chunker.next()) |chunk| {
-        if (chunk.len < 2) return .none;
-
-        if (std.mem.eql(u8, chunk, ctlseqs.ST)) {
-            const end = if (chunker.index) |index| index - 2 else input.len;
-            return .consume(end);
-        }
-    }
-
-    return .none;
+    const pos = std.mem.findPos(u8, input, 2, ctlseqs.ST) orelse return .none;
+    return .consume(pos + 2);
 }
 
 inline fn parseCsi(input: []const u8, caps: *TerminalCapabilities) ParseResult {
@@ -240,7 +237,6 @@ inline fn parseCsi(input: []const u8, caps: *TerminalCapabilities) ParseResult {
         },
         'c' => {
             // Primary DA (CSI ? Pm c)
-            std.debug.assert(sequence.len >= 4); // ESC [ ? c == 4 bytes
             switch (input[2]) {
                 '?' => {
                     // we issue the primary attrs as last one and expect an FIFO sequence handling of the terminal
@@ -263,9 +259,10 @@ inline fn parseCsi(input: []const u8, caps: *TerminalCapabilities) ParseResult {
         },
         'y' => {
             // DECRPM (CSI ? Pd ; Ps $ y)
-            const delim_idx = std.mem.indexOfScalarPos(u8, input, 3, ';') orelse return consume;
-            const pd = std.fmt.parseUnsigned(u16, input[3..delim_idx], 10) catch return consume;
-            const ps = std.fmt.parseUnsigned(u8, input[delim_idx + 1 .. sequence.len - 2], 10) catch return consume;
+            std.debug.assert(sequence[2] == '?');
+            const delim_idx = std.mem.indexOfScalarPos(u8, sequence, 3, ';') orelse return consume;
+            const pd = std.fmt.parseUnsigned(u16, sequence[3..delim_idx], 10) catch return consume;
+            const ps = std.fmt.parseUnsigned(u8, sequence[delim_idx + 1 .. sequence.len - 2], 10) catch return consume;
             switch (pd) {
                 // Focus Events
                 1004 => switch (ps) {
@@ -299,7 +296,7 @@ inline fn parseCsi(input: []const u8, caps: *TerminalCapabilities) ParseResult {
                         return consume;
                     },
                 },
-                // Color scheme reportnig, see https://github.com/contour-terminal/contour/blob/master/docs/vt-extensions/color-palette-update-notifications.md
+                // Color Scheme reporting, see https://github.com/contour-terminal/contour/blob/master/docs/vt-extensions/color-palette-update-notifications.md
                 2031 => switch (ps) {
                     0, 4 => return consume,
                     else => {

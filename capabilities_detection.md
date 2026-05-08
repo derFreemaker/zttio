@@ -47,7 +47,7 @@ indicates the setting of the mode. The Ps values are the same for the ANSI and D
 
 **Query:** CSI - ``?2027$p``
 
-### [Color scheme Updates](https://github.com/contour-terminal/contour/blob/master/docs/vt-extensions/color-palette-update-notifications.md)
+### [Color Scheme Updates](https://github.com/contour-terminal/contour/blob/master/docs/vt-extensions/color-palette-update-notifications.md)
 **Pd:** ``2031``
 
 **Query:** CSI - ``?2031$p``

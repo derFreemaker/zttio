@@ -102,8 +102,7 @@ pub fn fixedWinsize(comptime winsize: ?Winsize) fn (self_ptr: *anyopaque) GetWin
     }.func;
 }
 
-pub fn noWaitForData(self_ptr: *anyopaque, milliseconds: u16) bool {
+pub fn noWaitForData(self_ptr: *anyopaque, milliseconds: u16) void {
     _ = self_ptr;
     _ = milliseconds;
-    return false;
 }

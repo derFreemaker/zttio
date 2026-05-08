@@ -5,19 +5,25 @@ const builtin = @import("builtin");
 const Winsize = @import("winsize.zig").Winsize;
 
 pub const SignalCallback = struct {
+    pub const Func = fn (context: *anyopaque) void;
+
     context: *anyopaque,
-    func: *const fn (context: *anyopaque) void,
+    func: *const Func,
+};
+
+const Handler = struct {
+    active: std.atomic.Value(bool) = .init(false),
+    callback: SignalCallback = undefined,
 };
 
 /// global signal handlers
-var handlers: [8]SignalCallback = undefined;
-var handler_mutex: std.Thread.Mutex = .{};
-var handler_idx: usize = 0;
-
-var handler_installed: bool = false;
+var handlers = [_]Handler{Handler{}} ** 8;
+var handler_installed: std.atomic.Value(bool) = .init(false);
 
 pub fn setSignalHandler() void {
-    if (handler_installed) return;
+    if (handler_installed.cmpxchgStrong(false, true, .acq_rel, .acquire) != null) {
+        return;
+    }
 
     var act = posix.Sigaction{
         .handler = .{ .handler = handleWinch },
@@ -28,12 +34,13 @@ pub fn setSignalHandler() void {
         .flags = 0,
     };
     posix.sigaction(posix.SIG.WINCH, &act, null);
-    handler_installed = true;
 }
 
-/// Resets the signal handler to it's default
+/// Resets the signal handler to its default
 pub fn resetSignalHandler() void {
-    if (!handler_installed) return;
+    if (handler_installed.cmpxchgStrong(true, false, .acq_rel, .acquire) != null) {
+        return;
+    }
 
     var act = posix.Sigaction{
         .handler = .{ .handler = posix.SIG.DFL },
@@ -44,38 +51,43 @@ pub fn resetSignalHandler() void {
         .flags = 0,
     };
     posix.sigaction(posix.SIG.WINCH, &act, null);
-    handler_installed = false;
 }
 
-/// Install a signal handler for winsize. A maximum of 8 handlers may be
-/// installed
-pub fn notifyWinsize(handler: SignalCallback) error{OutOfMemory}!void {
-    handler_mutex.lock();
-    defer handler_mutex.unlock();
-    if (handler_idx == handlers.len) return error.OutOfMemory;
+/// Install a signal handler for winsize, a maximum of 8 handlers may be installed.
+pub fn notifyWinsize(callback: SignalCallback) error{OutOfMemory}!void {
+    for (&handlers) |*handler| {
+        if (handler.active.cmpxchgStrong(false, true, .acq_rel, .acquire) != null) {
+            continue;
+        }
 
-    handlers[handler_idx] = handler;
-    handler_idx += 1;
+        handler.callback = callback;
+        return;
+    }
+
+    return error.OutOfMemory;
 }
 
 pub fn removeNotifyWinsize(context: *anyopaque) void {
-    handler_mutex.lock();
-    defer handler_mutex.unlock();
+    for (&handlers) |*handler| {
+        if (!handler.active.load(.acquire)) {
+            continue;
+        }
+        if (handler.callback.context != context) {
+            continue;
+        }
 
-    for (handlers[0..handler_idx], 0..) |*handler, i| {
-        if (handler.context != context) continue;
-
-        handler.* = undefined;
-        @memmove(handlers[i .. handlers.len - 1], handlers[i + 1 ..]);
-        handler_idx -= 1;
+        handler.active.store(false, .release);
+        break;
     }
 }
 
-fn handleWinch(_: c_int) callconv(.c) void {
-    handler_mutex.lock();
-    defer handler_mutex.unlock();
+fn handleWinch(_: std.posix.SIG) callconv(.c) void {
+    for (&handlers) |handler| {
+        if (!handler.active.load(.acquire)) {
+            continue;
+        }
 
-    for (handlers[0..handler_idx]) |callback| {
+        const callback = handler.callback;
         callback.func(callback.context);
     }
 }

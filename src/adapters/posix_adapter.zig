@@ -21,11 +21,10 @@ stdout_writer: std.Io.File.Writer,
 
 termios: ?posix.termios = null,
 
-winsize_mutex: std.Thread.Mutex = .{},
-winsize: ?Winsize = null,
+winsize_pending: std.atomic.Value(PackedWinsize) = .init(.empty),
 
 pub fn init(allocator: std.mem.Allocator, io: std.Io, stdin: std.Io.File, stdout: std.Io.File) error{ OutOfMemory, NoTty }!PosixAdapter {
-    if (!stdout.isTty(io) catch false) return error.NoTty;
+    if (!(stdout.isTty(io) catch false)) return error.NoTty;
 
     const stdin_buf = try allocator.alloc(u8, 1024);
     errdefer allocator.free(stdin_buf);
@@ -36,11 +35,11 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, stdin: std.Io.File, stdout
     return PosixAdapter{
         .stdin = stdin.handle,
         .stdin_buf = stdin_buf,
-        .stdin_reader = stdin.reader(stdin_buf),
+        .stdin_reader = stdin.reader(io, stdin_buf),
 
         .stdout = stdout.handle,
         .stdout_buf = stdout_buf,
-        .stdout_writer = stdout.writer(stdout_buf),
+        .stdout_writer = stdout.writer(io, stdout_buf),
     };
 }
 
@@ -80,9 +79,7 @@ fn setWinsize(self_ptr: *anyopaque) void {
 
     const winsize = getWinsize(self_ptr) catch return;
 
-    self.winsize_mutex.lock();
-    defer self.winsize_mutex.unlock();
-    self.winsize = winsize;
+    self.winsize_pending.store(.from(winsize), .release);
 }
 
 fn getWinsize(self_ptr: *anyopaque) Adapter.GetWinsizeError!Winsize {
@@ -113,16 +110,11 @@ fn getWinsize(self_ptr: *anyopaque) Adapter.GetWinsizeError!Winsize {
 fn read(self_ptr: *anyopaque) Adapter.ReadError!?ReadResult {
     const self: *PosixAdapter = @ptrCast(@alignCast(self_ptr));
 
-    if (self.winsize_mutex.tryLock()) {
-        defer self.winsize_mutex.unlock();
-
-        if (self.winsize) |winsize| {
-            self.winsize = null;
-
-            return ReadResult{
-                .event = .{ .winsize = winsize },
-            };
-        }
+    const winsize = self.winsize_pending.swap(.empty, .acquire);
+    if (!winsize.isEmpty()) {
+        return ReadResult{
+            .event = .{ .winsize = winsize.to() },
+        };
     }
 
     var buf: [4]u8 = undefined;
@@ -136,11 +128,16 @@ fn read(self_ptr: *anyopaque) Adapter.ReadError!?ReadResult {
 
     const required = std.unicode.utf8ByteSequenceLength(buf[0]) catch return error.ReadFailed;
     var i: usize = 1;
-    while (required > i) : (i += 1) {
-        _ = posix.read(self.stdin, buf[i .. i + 1]) catch |err| switch (err) {
+    while (required > i) {
+        const n_continue = posix.read(self.stdin, buf[i .. i + 1]) catch |err| switch (err) {
             error.WouldBlock => continue,
             else => return error.ReadFailed,
         };
+        if (n_continue == 0) {
+            return error.ReadFailed;
+        }
+
+        i += 1;
     }
 
     return ReadResult{
@@ -198,7 +195,7 @@ fn disable(self_ptr: *anyopaque) void {
     const self: *PosixAdapter = @ptrCast(@alignCast(self_ptr));
     const termios = self.termios orelse return;
 
-    std.posix.tcsetattr(std.posix.STDIN_FILENO, .FLUSH, termios) catch |err| {
+    std.posix.tcsetattr(self.stdin, .FLUSH, termios) catch |err| {
         log.err("failed to disable when setting termios: {s}", .{@errorName(err)});
     };
 
@@ -222,3 +219,42 @@ fn getWriter(self_ptr: *anyopaque) *std.Io.Writer {
 
     return &self.stdout_writer.interface;
 }
+
+const PackedWinsize = packed struct(u64) {
+    cols: u16,
+    rows: u16,
+    x_pixel: u16,
+    y_pixel: u16,
+
+    pub const empty = PackedWinsize{
+        .cols = 0,
+        .rows = 0,
+        .x_pixel = 0,
+        .y_pixel = 0,
+    };
+
+    pub inline fn isEmpty(self: PackedWinsize) bool {
+        return self.cols == 0 and
+            self.rows == 0 and
+            self.x_pixel == 0 and
+            self.y_pixel == 0;
+    }
+
+    pub fn from(winsize: Winsize) PackedWinsize {
+        return PackedWinsize{
+            .cols = winsize.cols,
+            .rows = winsize.rows,
+            .x_pixel = winsize.x_pixel,
+            .y_pixel = winsize.y_pixel,
+        };
+    }
+
+    pub fn to(self: PackedWinsize) Winsize {
+        return Winsize{
+            .cols = self.cols,
+            .rows = self.rows,
+            .x_pixel = self.x_pixel,
+            .y_pixel = self.y_pixel,
+        };
+    }
+};

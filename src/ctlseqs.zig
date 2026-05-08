@@ -117,8 +117,8 @@ pub const Erase = struct {
 };
 
 pub const Screen = struct {
-    pub const save = CSI ++ "?47l";
-    pub const restore = CSI ++ "?47h";
+    pub const save = CSI ++ "?47h";
+    pub const restore = CSI ++ "?47l";
 
     pub const alternative_enable = CSI ++ "?1049h";
     pub const alternative_disable = CSI ++ "?1049l";
@@ -167,8 +167,8 @@ pub const Terminal = struct {
     pub const unicode_reset = CSI ++ "?2027l";
 
     // bracketed paste
-    pub const braketed_paste_set = CSI ++ "?2004h";
-    pub const braketed_paste_reset = CSI ++ "?2004l";
+    pub const bracketed_paste_set = CSI ++ "?2004h";
+    pub const bracketed_paste_reset = CSI ++ "?2004l";
 
     // color scheme updates
     pub const color_scheme_request = CSI ++ "?996n";
@@ -251,7 +251,7 @@ pub const Terminal = struct {
 
     // clipboard
     pub const clipboard_copy_x = OSC ++ "52;c;{s}" ++ ST;
-    pub fn copyToClipboard(writer: *std.Io.Writer, encoder_allocator: std.mem.Allocator, content: []const u8) std.Io.Writer.Error!void {
+    pub fn copyToClipboard(writer: *std.Io.Writer, encoder_allocator: std.mem.Allocator, content: []const u8) (std.Io.Writer.Error || std.mem.Allocator.Error)!void {
         const encoder = std.base64.standard.Encoder;
 
         const size = encoder.calcSize(content.len);

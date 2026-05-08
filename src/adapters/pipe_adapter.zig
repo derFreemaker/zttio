@@ -44,11 +44,14 @@ fn read(self_ptr: *anyopaque) Adapter.ReadError!?Adapter.ReadResult {
     const self: *PipeAdapter = @ptrCast(@alignCast(self_ptr));
 
     var buf: [4]u8 = undefined;
-    buf[0] = self.reader.takeByte() catch Adapter.ReadError.ReadFailed;
+    buf[0] = self.reader.takeByte() catch |err| switch (err) {
+        error.EndOfStream => return null,
+        else => return Adapter.ReadError.ReadFailed,
+    };
 
     const n = std.unicode.utf8ByteSequenceLength(buf[0]) catch Adapter.ReadError.ReadFailed;
     if (n > 1) {
-        self.reader.readSliceAll(buf[1 .. n - 1]) catch Adapter.ReadError.ReadFailed;
+        self.reader.readSliceAll(buf[1..n]) catch Adapter.ReadError.ReadFailed;
     }
 
     const codepoint = std.unicode.utf8Decode(buf[0..n]) catch Adapter.ReadError.ReadFailed;

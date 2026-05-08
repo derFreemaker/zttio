@@ -112,7 +112,7 @@ pub fn nextEvent(self: *Parser, should_quit: ?*const bool) ParseError!?Event {
                     .key_release => {
                         // This causes an issue if a key is held before entering paste
                         // and somehow released inside the paste.
-                        // Should be very unlikly though.
+                        // Should be very unlikely though.
                         if (self.in_paste) {
                             continue;
                         }
@@ -329,20 +329,11 @@ fn parseSs3(input: []const u8) ParseResult {
 }
 
 /// Skips sequences until we see an ST (String Terminator, ESC \)
-fn skipUntilST(input: []const u8) ParseResult {
+inline fn skipUntilST(input: []const u8) ParseResult {
     if (input.len < 3) return .none;
 
-    var chunker = std.mem.window(u8, input[2..], 2, 1);
-    while (chunker.next()) |chunk| {
-        if (chunk.len < 2) return .none;
-
-        if (std.mem.eql(u8, chunk, ctlseqs.ST)) {
-            const end = if (chunker.index) |index| index - 2 else input.len;
-            return .skip(end);
-        }
-    }
-
-    return .none;
+    const pos = std.mem.findPos(u8, input, 2, ctlseqs.ST) orelse return .none;
+    return .skip(pos + 2);
 }
 
 /// Parses an OSC sequence
@@ -358,7 +349,7 @@ fn parseOsc(allocator: std.mem.Allocator, input: []const u8) ParseError!ParseRes
         if (esc_result.n > 0) break :blk esc_result.n;
 
         // No escape, could be BEL terminated
-        const bel = std.mem.indexOfScalarPos(u8, input, 2, 0x07) orelse return .none;
+        const bel = std.mem.findScalarPos(u8, input, 2, 0x07) orelse return .none;
         bel_terminated = true;
         break :blk bel + 1;
     };
@@ -368,12 +359,12 @@ fn parseOsc(allocator: std.mem.Allocator, input: []const u8) ParseError!ParseRes
 
     const skip: ParseResult = .skip(sequence.len);
 
-    const semicolon_idx = std.mem.indexOfScalarPos(u8, input, 2, ';') orelse return skip;
+    const semicolon_idx = std.mem.findScalarPos(u8, input, 2, ';') orelse return skip;
     const ps = std.fmt.parseUnsigned(u8, input[2..semicolon_idx], 10) catch return skip;
 
     switch (ps) {
         4 => {
-            const color_idx_delim = std.mem.indexOfScalarPos(u8, input, semicolon_idx + 1, ';') orelse return skip;
+            const color_idx_delim = std.mem.findScalarPos(u8, input, semicolon_idx + 1, ';') orelse return skip;
             const ps_idx = std.fmt.parseUnsigned(u8, input[semicolon_idx + 1 .. color_idx_delim], 10) catch return skip;
             const color_spec = if (bel_terminated)
                 input[color_idx_delim + 1 .. sequence.len - 1]
@@ -488,14 +479,13 @@ fn parseCsi(allocator: std.mem.Allocator, input: []const u8) ParseError!ParseRes
                 // text_as_codepoint[:text_as_codepoint]
                 const field_buf = field_iter.next() orelse break :field3;
                 var param_iter = std.mem.splitScalar(u8, field_buf, ':');
-                var total: usize = 0;
                 var text_buf: std.ArrayList(u8) = .empty;
                 while (param_iter.next()) |cp_buf| {
                     const cp = parseParam(u21, cp_buf, null) orelse return skip;
-                    const cp_utf8_len = std.unicode.utf8CodepointSequenceLength(cp) catch unreachable;
+                    const cp_utf8_len = std.unicode.utf8CodepointSequenceLength(cp) catch return skip;
 
                     const cp_text_buf = try text_buf.addManyAsSlice(allocator, cp_utf8_len);
-                    total += std.unicode.utf8Encode(cp, cp_text_buf) catch return skip;
+                    _ = std.unicode.utf8Encode(cp, cp_text_buf) catch return skip;
                 }
                 key.text = .from(text_buf.items);
             }
@@ -509,7 +499,7 @@ fn parseCsi(allocator: std.mem.Allocator, input: []const u8) ParseError!ParseRes
             // CSI number ; modifier ~
             // CSI number ; modifier:event_type ; text_as_codepoint ~
             var field_iter = std.mem.splitScalar(u8, sequence[2 .. sequence.len - 1], ';');
-            const number_buf = field_iter.next() orelse unreachable; // always will have one field
+            const number_buf = field_iter.next() orelse unreachable;
             const number = parseParam(u16, number_buf, null) orelse return skip;
 
             var key: Key = .{
@@ -557,14 +547,13 @@ fn parseCsi(allocator: std.mem.Allocator, input: []const u8) ParseError!ParseRes
                 // text_as_codepoint[:text_as_codepoint]
                 const field_buf = field_iter.next() orelse break :field3;
                 var param_iter = std.mem.splitScalar(u8, field_buf, ':');
-                var total: usize = 0;
                 var text_buf: std.ArrayList(u8) = .empty;
                 while (param_iter.next()) |cp_buf| {
                     const cp = parseParam(u21, cp_buf, null) orelse return skip;
-                    const cp_utf8_len = std.unicode.utf8CodepointSequenceLength(cp) catch unreachable;
+                    const cp_utf8_len = std.unicode.utf8CodepointSequenceLength(cp) catch return skip;
 
                     const cp_text_buf = try text_buf.addManyAsSlice(allocator, cp_utf8_len);
-                    total += std.unicode.utf8Encode(cp, cp_text_buf) catch return skip;
+                    _ = std.unicode.utf8Encode(cp, cp_text_buf) catch return skip;
                 }
                 key.text = .from(text_buf.items);
             }
@@ -583,7 +572,7 @@ fn parseCsi(allocator: std.mem.Allocator, input: []const u8) ParseError!ParseRes
             std.debug.assert(sequence.len >= 3);
             switch (sequence[2]) {
                 '?' => {
-                    const delim_idx = std.mem.indexOfScalarPos(u8, input, 3, ';') orelse return skip;
+                    const delim_idx = std.mem.findScalarPos(u8, input, 3, ';') orelse return skip;
                     const ps = std.fmt.parseUnsigned(u16, input[3..delim_idx], 10) catch return skip;
                     switch (ps) {
                         997 => {
@@ -655,7 +644,7 @@ fn parseCsi(allocator: std.mem.Allocator, input: []const u8) ParseError!ParseRes
                     key.shifted_codepoint = parseKeyCP(shifted_cp_buf, null);
                 }
                 if (param_iter.next()) |base_layout_buf| {
-                    key.shifted_codepoint = parseKeyCP(base_layout_buf, null);
+                    key.base_layout_codepoint = parseKeyCP(base_layout_buf, null);
                 }
             }
 
@@ -678,14 +667,13 @@ fn parseCsi(allocator: std.mem.Allocator, input: []const u8) ParseError!ParseRes
                 // text_as_codepoint[:text_as_codepoint]
                 const field_buf = field_iter.next() orelse break :field3;
                 var param_iter = std.mem.splitScalar(u8, field_buf, ':');
-                var total: usize = 0;
                 var text_buf: std.ArrayList(u8) = .empty;
                 while (param_iter.next()) |cp_buf| {
                     const cp = parseParam(u21, cp_buf, null) orelse return skip;
-                    const cp_utf8_len = std.unicode.utf8CodepointSequenceLength(cp) catch unreachable;
+                    const cp_utf8_len = std.unicode.utf8CodepointSequenceLength(cp) catch return skip;
 
                     const cp_text_buf = try text_buf.addManyAsSlice(allocator, cp_utf8_len);
-                    total += std.unicode.utf8Encode(cp, cp_text_buf) catch return skip;
+                    _ = std.unicode.utf8Encode(cp, cp_text_buf) catch return skip;
                 }
                 key.text = .from(text_buf.items);
             }
@@ -802,7 +790,7 @@ fn parseApc(input: []const u8) ParseResult {
 
     switch (sequence[2]) {
         'G' => {
-            const semicolon_idx = std.mem.indexOfScalarPos(u8, sequence, 3, ';') orelse return skip;
+            const semicolon_idx = std.mem.findScalarPos(u8, sequence, 3, ';') orelse return skip;
 
             var maybe_image_id: ?u32 = null;
             var maybe_image_num: ?u32 = null;
@@ -828,7 +816,7 @@ fn parseApc(input: []const u8) ParseResult {
             const content_buf = sequence[semicolon_idx + 1 .. sequence.len - 2];
             if (content_buf.len == 0) return skip;
 
-            const colon_idx = std.mem.indexOfScalar(u8, content_buf, ':') orelse content_buf.len;
+            const colon_idx = std.mem.findScalar(u8, content_buf, ':') orelse content_buf.len;
             const response_type_buf = content_buf[0..colon_idx];
             if (std.mem.eql(u8, response_type_buf, "OK")) {
                 return .event(sequence.len, Event{ .kitty_graphics_response = .{
@@ -883,9 +871,9 @@ inline fn parseMouse(input: []const u8, full_input: []const u8) ParseResult {
         py = full_input[5] - 32;
     } else if (input.len >= 4 and input[2] == '<') {
         xterm = false;
-        const delim1 = std.mem.indexOfScalarPos(u8, input, 3, ';') orelse return skip;
+        const delim1 = std.mem.findScalarPos(u8, input, 3, ';') orelse return skip;
         button_mask = parseParam(u16, input[3..delim1], null) orelse return skip;
-        const delim2 = std.mem.indexOfScalarPos(u8, input, delim1 + 1, ';') orelse return skip;
+        const delim2 = std.mem.findScalarPos(u8, input, delim1 + 1, ';') orelse return skip;
         px = parseParam(u16, input[delim1 + 1 .. delim2], 1) orelse return skip;
         py = parseParam(u16, input[delim2 + 1 .. input.len - 1], 1) orelse return skip;
     } else {

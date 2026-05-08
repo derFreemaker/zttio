@@ -44,8 +44,8 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_zttio_tests.step);
 
-    const basic_example_exe = b.addExecutable(.{
-        .name = "basic_example",
+    const example_exe = b.addExecutable(.{
+        .name = "example",
         .root_module = b.createModule(.{
             .target = target,
             .optimize = optimize,
@@ -57,11 +57,11 @@ pub fn build(b: *std.Build) void {
             },
         }),
     });
-    const basic_example_run_step = b.step("run-basic-example", "run basic example");
-    const basic_example_cmd = b.addRunArtifact(basic_example_exe);
-    basic_example_run_step.dependOn(&basic_example_cmd.step);
-    basic_example_cmd.step.dependOn(&basic_example_exe.step);
+    const example_run_step = b.step("run-example", "run example");
+    const example_cmd = b.addRunArtifact(example_exe);
+    example_run_step.dependOn(&example_cmd.step);
+    example_cmd.step.dependOn(&example_exe.step);
     if (b.args) |args| {
-        basic_example_cmd.addArgs(args);
+        example_cmd.addArgs(args);
     }
 }

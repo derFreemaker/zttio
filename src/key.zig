@@ -55,9 +55,21 @@ pub fn matchesAny(self: Key, cps: []const KeyCP, mods: Modifiers) bool {
 
 /// matches base layout codes, useful for shortcut matching when an alternate key
 /// layout is used
+/// ignored modifiers: caps_lock, num_lock
 pub fn matchShortcut(self: Key, cp: KeyCP, mods: Modifiers) bool {
-    if (self.base_layout_codepoint == null) return false;
-    return cp == self.base_layout_codepoint.? and self.mods.eql(mods);
+    if (self.base_layout_codepoint == null) {
+        return false;
+    }
+
+    var self_mods = self.mods;
+    self_mods.caps_lock = false;
+    self_mods.num_lock = false;
+
+    var tgt_mods = mods;
+    tgt_mods.caps_lock = false;
+    tgt_mods.num_lock = false;
+
+    return cp == self.base_layout_codepoint.? and self_mods.eql(tgt_mods);
 }
 
 /// matches keys that aren't upper case versions when shifted.
@@ -295,8 +307,8 @@ pub const KeyCP = enum(u21) {
     J = 0x4A,
     K = 0x4B,
     L = 0x4C,
-    M = 0x4E,
-    N = 0x4D,
+    M = 0x4D,
+    N = 0x4E,
     O = 0x4F,
     P = 0x50,
     Q = 0x51,
@@ -327,8 +339,8 @@ pub const KeyCP = enum(u21) {
     j = 0x6A,
     k = 0x6B,
     l = 0x6C,
-    m = 0x6E,
-    n = 0x6D,
+    m = 0x6D,
+    n = 0x6E,
     o = 0x6F,
     p = 0x70,
     q = 0x71,

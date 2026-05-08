@@ -1,7 +1,6 @@
 # Supported Escape Sequences
 
-> Undocumented escape sequences with the same introducer (e.g.``ESC [``) are ignored.
-
+> Undocumented escape sequences with the same introducer (e.g. ``ESC [``) are ignored.
 ## SS2
 **Introducer:** ``ESC N``
 
@@ -34,7 +33,7 @@ _completely ignored_
 - ``2...~`` -> key event of ``insert``
 - ``3...~`` -> key event of ``delete``
 - ``5...~`` -> key event of ``page_up``
-- ``6...~`` -> key event op ``page_down``
+- ``6...~`` -> key event of ``page_down``
 - ``...A`` -> key event of ``up``
 - ``...B`` -> key event of ``down``
 - ``...C`` -> key event of ``right``
@@ -103,7 +102,7 @@ _completely ignored_
 _completely ignored_
 
 ## PM
-**Introducer:** `` ESC ^``
+**Introducer:** ``ESC ^``
 
 _completely ignored_
 

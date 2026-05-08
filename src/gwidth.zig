@@ -47,10 +47,10 @@ fn eawToWidth(cp: u21, eaw: uucode.types.EastAsianWidth) i16 {
 }
 
 /// returns the width of the provided string, as measured by the method chosen
-pub fn gwidth(str: []const u8, method: Method) u16 {
+pub fn gwidth(str: []const u8, method: Method) usize {
     switch (method) {
         .unicode => {
-            var total: u16 = 0;
+            var total: usize = 0;
             var grapheme_iter = uucode.grapheme.Iterator(uucode.utf8.Iterator).init(.init(str));
 
             var grapheme_start: usize = 0;
@@ -124,7 +124,7 @@ pub fn gwidth(str: []const u8, method: Method) u16 {
             return total;
         },
         .wcwidth => {
-            var total: u16 = 0;
+            var total: usize = 0;
             var iter = uucode.utf8.Iterator.init(str);
             while (iter.next()) |cp| {
                 const w: i16 = switch (cp) {
@@ -141,11 +141,11 @@ pub fn gwidth(str: []const u8, method: Method) u16 {
         },
         .no_zwj => {
             var iter = std.mem.splitSequence(u8, str, "\u{200D}");
-            var result: u16 = 0;
+            var total: usize = 0;
             while (iter.next()) |s| {
-                result += gwidth(s, .unicode);
+                total += gwidth(s, .unicode);
             }
-            return result;
+            return total;
         },
     }
 }

@@ -46,6 +46,7 @@ pub const Color = union(enum) {
         if (!std.mem.eql(u8, "rgb", prefix)) return error.InvalidColorSpec;
 
         const spec_str = iter.next() orelse return error.InvalidColorSpec;
+        if (iter.next() != null) return error.InvalidColorSpec;
 
         var spec_iter = std.mem.splitScalar(u8, spec_str, '/');
 

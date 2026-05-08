@@ -27,6 +27,9 @@ events: [INPUT_RECORD_BUF_LEN]winconsole.INPUT_RECORD = undefined,
 events_count: usize = 0,
 events_pos: usize = 0,
 
+utf16_buf: [2]u16 = undefined,
+utf16_half: bool = false,
+
 last_mouse_button_press: u16 = 0,
 
 org_state: ?ConsoleMode = null,
@@ -84,9 +87,10 @@ fn getWinsize(self_ptr: *anyopaque) Adapter.GetWinsizeError!Winsize {
         return Adapter.GetWinsizeError.Failed;
     }
 
+    const window = console_info.srWindow;
     return Winsize{
-        .cols = @intCast(console_info.dwSize.X),
-        .rows = @intCast(console_info.dwSize.Y),
+        .cols = @intCast(window.Right - window.Left + 1),
+        .rows = @intCast(window.Bottom - window.Top + 1),
         .x_pixel = 0,
         .y_pixel = 0,
     };
@@ -94,9 +98,6 @@ fn getWinsize(self_ptr: *anyopaque) Adapter.GetWinsizeError!Winsize {
 
 fn read(self_ptr: *anyopaque) Adapter.ReadError!?ReadResult {
     const self: *WinAdapter = @ptrCast(@alignCast(self_ptr));
-
-    var utf16_buf: [2]u16 = undefined;
-    var utf16_half: bool = false;
 
     while (true) {
         const record = try self.peekEvent() orelse return null;
@@ -106,10 +107,10 @@ fn read(self_ptr: *anyopaque) Adapter.ReadError!?ReadResult {
             winconsole.KEY_EVENT => {
                 const event = record.Event.KeyEvent;
 
-                if (utf16_half and std.unicode.utf16IsLowSurrogate(event.uChar.UnicodeChar)) {
-                    utf16_half = false;
-                    utf16_buf[1] = event.uChar.UnicodeChar;
-                    const cp: u21 = std.unicode.utf16DecodeSurrogatePair(&utf16_buf) catch unreachable;
+                if (self.utf16_half and std.unicode.utf16IsLowSurrogate(event.uChar.UnicodeChar)) {
+                    self.utf16_half = false;
+                    self.utf16_buf[1] = event.uChar.UnicodeChar;
+                    const cp: u21 = std.unicode.utf16DecodeSurrogatePair(&self.utf16_buf) catch unreachable;
 
                     return ReadResult{ .codepoint = cp };
                 }
@@ -117,8 +118,8 @@ fn read(self_ptr: *anyopaque) Adapter.ReadError!?ReadResult {
                 const base_layout: u16 = switch (event.wVirtualKeyCode) {
                     0x00 => { // delivered when we get an escape sequence or a unicode codepoint
                         if (std.unicode.utf16IsHighSurrogate(event.uChar.UnicodeChar)) {
-                            utf16_buf[0] = event.uChar.UnicodeChar;
-                            utf16_half = true;
+                            self.utf16_buf[0] = event.uChar.UnicodeChar;
+                            self.utf16_half = true;
                             continue;
                         }
 
@@ -172,7 +173,7 @@ fn read(self_ptr: *anyopaque) Adapter.ReadError!?ReadResult {
                     0x73 => Key.f4,
                     0x74 => Key.f5,
                     0x75 => Key.f6,
-                    0x76 => Key.f8,
+                    0x76 => Key.f7,
                     0x77 => Key.f8,
                     0x78 => Key.f9,
                     0x79 => Key.f10,
@@ -228,8 +229,8 @@ fn read(self_ptr: *anyopaque) Adapter.ReadError!?ReadResult {
                 };
 
                 if (std.unicode.utf16IsHighSurrogate(base_layout)) {
-                    utf16_buf[0] = base_layout;
-                    utf16_half = true;
+                    self.utf16_buf[0] = base_layout;
+                    self.utf16_half = true;
                     continue;
                 }
 
@@ -423,11 +424,14 @@ fn readNextEvents(self: *WinAdapter) error{Unexpected}!bool {
 }
 
 fn waitForStdinData(self_ptr: *anyopaque, milliseconds: u16) void {
+    if (milliseconds == 0) {
+        return;
+    }
+
     const self: *WinAdapter = @ptrCast(@alignCast(self_ptr));
 
-    const timeout: i64 = milliseconds;
-    // @Check
-    _ = windows.ntdll.NtWaitForSingleObject(self.stdin, .TRUE, &timeout);
+    const timeout: i64 = -@as(i64, milliseconds) * 10_000;
+    _ = windows.ntdll.NtWaitForSingleObject(self.stdin, .FALSE, &timeout);
 }
 
 const ConsoleMode = struct {

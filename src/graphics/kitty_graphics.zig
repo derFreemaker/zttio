@@ -4,7 +4,6 @@ const zigimg = @import("zigimg");
 const Source = @import("source.zig").Source;
 
 const ctlseqs = @import("../ctlseqs.zig");
-const ListSeperator = @import("../list_separator.zig");
 
 pub const INTRODUCER = ctlseqs.APC ++ "G";
 pub const HEADER_CLOSE = ";";
@@ -163,7 +162,7 @@ pub const EraseOptions = union(enum) {
     in_range: InRange, // r
     intersect_column: u32, // x
     intersect_row: u32, // y
-    intersect_z: u32, // z
+    intersect_z: i32, // z
 
     pub const Select = struct {
         id_or_num: IdOrNum,
@@ -178,7 +177,7 @@ pub const EraseOptions = union(enum) {
     pub const ZCellPosition = struct {
         x: u32 = 0,
         y: u32 = 0,
-        z: u32 = 0,
+        z: i32 = 0,
     };
 
     pub const InRange = struct {
@@ -282,17 +281,17 @@ fn writeBytes(writer: *std.Io.Writer, raw_bytes: []const u8) error{ WriteFailed,
     const encoder = std.base64.standard.Encoder;
 
     if (raw_bytes.len > MAX_RAW_CHUNK_LEN) {
-        var chunker = std.mem.window(u8, raw_bytes, MAX_RAW_CHUNK_LEN, MAX_RAW_CHUNK_LEN);
+        var chunker = Chunker.init(raw_bytes);
 
         try writer.print(",{c}=1" ++ HEADER_CLOSE, .{
             multiple_parts_flag,
         });
         try encoder.encodeWriter(writer, chunker.next().?);
 
-        while (chunker.next()) |chunk| {
+        while (chunker.peek()) |chunk| : (chunker.toss()) {
             try writer.print(CLOSE ++ INTRODUCER ++ "{c}={d}" ++ HEADER_CLOSE, .{
                 multiple_parts_flag,
-                if (chunker.index == null) @as(u32, 0) else @as(u32, 1),
+                if (chunker.hasNext()) @as(u32, 1) else @as(u32, 0),
             });
 
             try encoder.encodeWriter(writer, chunk);
@@ -303,9 +302,44 @@ fn writeBytes(writer: *std.Io.Writer, raw_bytes: []const u8) error{ WriteFailed,
     }
 }
 
+const Chunker = struct {
+    buf: []const u8,
+    index: usize = 0,
+
+    pub fn init(buffer: []const u8) Chunker {
+        return Chunker{
+            .buf = buffer,
+        };
+    }
+
+    pub inline fn hasNext(self: *const Chunker) bool {
+        return self.index < self.buf.len;
+    }
+
+    pub fn peek(self: *const Chunker) ?[]const u8 {
+        if (!self.hasNext()) {
+            return null;
+        }
+
+        const start = self.index;
+        const end = @min(self.buf.len, start + MAX_RAW_CHUNK_LEN);
+        return self.buf[start..end];
+    }
+
+    pub fn toss(self: *Chunker) void {
+        self.index = @min(self.buf.len, self.index + MAX_RAW_CHUNK_LEN);
+    }
+
+    pub fn next(self: *Chunker) ?[]const u8 {
+        const chunk = self.peek();
+        self.toss();
+        return chunk;
+    }
+};
+
 pub inline fn writeFlagStruct(writer: *std.Io.Writer, flags: anytype) std.Io.Writer.Error!void {
     const FlagsT = @TypeOf(flags);
-    if (@typeInfo(FlagsT) != .@"struct" and !@typeInfo(FlagsT).@"struct".is_tuple) @compileError(std.fmt.comptimePrint("expected a struct (T: {s}) as flags set", .{@typeName(FlagsT)}));
+    if (@typeInfo(FlagsT) != .@"struct") @compileError(std.fmt.comptimePrint("expected a struct (T: {s}) as flags set", .{@typeName(FlagsT)}));
     const info = @typeInfo(FlagsT).@"struct";
 
     inline for (info.fields) |field| {

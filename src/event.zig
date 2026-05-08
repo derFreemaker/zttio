@@ -52,11 +52,21 @@ pub const Event = union(enum) {
 
     pub fn clone(event: *const Event, allocator: std.mem.Allocator) error{OutOfMemory}!Event {
         switch (event.*) {
-            .key_press, .key_release => |key| {
+            .key_press => |key| {
                 if (key.text == .long) {
                     var new_key = key;
                     new_key.text = try key.text.clone(allocator);
                     return Event{ .key_press = new_key };
+                }
+
+                return event.*;
+            },
+
+            .key_release => |key| {
+                if (key.text == .long) {
+                    var new_key = key;
+                    new_key.text = try key.text.clone(allocator);
+                    return Event{ .key_release = new_key };
                 }
 
                 return event.*;

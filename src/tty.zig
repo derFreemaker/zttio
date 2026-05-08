@@ -53,7 +53,7 @@ pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, ad
 
     const writer = adapter.getWriter();
 
-    try writer.writeAll(ctlseqs.Terminal.braketed_paste_set);
+    try writer.writeAll(ctlseqs.Terminal.bracketed_paste_set);
 
     if (opts.caps.in_band_winsize) {
         try writer.writeAll(ctlseqs.Terminal.in_band_resize_set);
@@ -75,7 +75,7 @@ pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, ad
         .allocator = allocator,
 
         .writer = writer,
-        .parser = .init(
+        .parser = Parser.init(
             allocator,
             event_allocator,
             adapter,
@@ -101,7 +101,7 @@ pub fn deinit(self: *Tty) void {
         self.writer.writeAll(ctlseqs.Terminal.in_band_resize_reset) catch {};
     }
 
-    self.writer.writeAll(ctlseqs.Terminal.braketed_paste_reset) catch {};
+    self.writer.writeAll(ctlseqs.Terminal.bracketed_paste_reset) catch {};
 
     self.writer.writeAll(ctlseqs.Terminal.mouse_reset) catch {};
 
@@ -116,7 +116,7 @@ pub inline fn getWinsize(self: *const Tty) Winsize {
     return self.winsize;
 }
 
-pub inline fn updateWinsize(self: *const Tty) Parser.GetWinsizeError!Winsize {
+pub inline fn updateWinsize(self: *Tty) Parser.GetWinsizeError!Winsize {
     const winsize = try self.parser.getWinsize();
     self.winsize = winsize;
     return winsize;
@@ -154,9 +154,9 @@ pub fn setTitle(self: *Tty, title: []const u8) std.Io.Writer.Error!void {
     return ctlseqs.Terminal.setTitle(self.writer, title);
 }
 
-pub fn changeCurrentWorkingDirectory(self: *Tty, path: []const u8) std.Io.Writer.Error!void {
-    std.debug.assert(std.fs.path.isAbsolute(path));
-    return ctlseqs.Terminal.cd(self.writer, path);
+pub fn changeCurrentWorkingDirectory(self: *Tty, absolute_path: []const u8) std.Io.Writer.Error!void {
+    std.debug.assert(std.fs.path.isAbsolute(absolute_path));
+    return ctlseqs.Terminal.cd(self.writer, absolute_path);
 }
 
 pub fn saveScreen(self: *Tty) std.Io.Writer.Error!void {
