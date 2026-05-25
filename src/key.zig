@@ -1,6 +1,8 @@
 const std = @import("std");
 const uucode = @import("uucode");
 
+const Switchable = @import("switchable.zig").Switchable;
+
 const Key = @This();
 
 /// The unicode codepoint of the key event.
@@ -20,6 +22,25 @@ base_layout_codepoint: ?KeyCP = null,
 
 mods: Modifiers = .{},
 
+const KeyMatching = Switchable(packed struct {
+    codepoint: KeyCP,
+    mods: Modifiers,
+});
+
+pub fn switchable(self: *const Key) KeyMatching.SwitchValue {
+    return matches(self.codepoint, self.mods);
+}
+
+pub fn matches(codepoint: KeyCP, mods: Modifiers) KeyMatching.SwitchValue {
+    return KeyMatching.makeSwitchable(&.{
+        .codepoint = codepoint,
+        .mods = mods.ignore(Modifiers{
+            .caps_lock = true,
+            .num_lock = true,
+        }),
+    });
+}
+
 /// matches follows a loose matching algorithm for key matches
 /// 1. If the codepoint and modifiers are exact matches
 ///
@@ -32,7 +53,7 @@ mods: Modifiers = .{},
 /// 3. If there is a shifted codepoint and it matches
 ///
 ///    ignored modifiers: shift, caps_lock, num_lock
-pub fn matches(self: Key, cp: KeyCP, mods: Modifiers) bool {
+pub fn looseMatches(self: Key, cp: KeyCP, mods: Modifiers) bool {
     // rule 1
     if (self.matchExact(cp, mods)) return true;
 
@@ -46,9 +67,9 @@ pub fn matches(self: Key, cp: KeyCP, mods: Modifiers) bool {
 }
 
 /// matches against any of the provided codepoints.
-pub fn matchesAny(self: Key, cps: []const KeyCP, mods: Modifiers) bool {
+pub fn looseMatchesAny(self: Key, cps: []const KeyCP, mods: Modifiers) bool {
     for (cps) |cp| {
-        if (self.matches(cp, mods)) return true;
+        if (self.looseMatches(cp, mods)) return true;
     }
     return false;
 }
@@ -225,6 +246,12 @@ pub const Modifiers = packed struct(u8) {
         const a: u8 = @bitCast(self);
         const b: u8 = @bitCast(other);
         return a == b;
+    }
+
+    pub fn ignore(self: Modifiers, comptime mods: Modifiers) Modifiers {
+        const bits: u8 = @bitCast(self);
+        const mask: u8 = comptime ~@as(u8, @bitCast(mods));
+        return @bitCast(bits & mask);
     }
 };
 
@@ -738,8 +765,8 @@ test "matches 'a'" {
         .mods = .{ .num_lock = true },
         .text = .from("a"),
     };
-    try testing.expect(key.matches(.from('a'), .{}));
-    try testing.expect(!key.matches(.from('a'), .{ .shift = true }));
+    try testing.expect(key.looseMatches(.from('a'), .{}));
+    try testing.expect(!key.looseMatches(.from('a'), .{ .shift = true }));
 }
 
 test "matches 'shift+a'" {
@@ -749,10 +776,10 @@ test "matches 'shift+a'" {
         .mods = .{ .shift = true },
         .text = .from("A"),
     };
-    try testing.expect(key.matches(.from('a'), .{ .shift = true }));
-    try testing.expect(!key.matches(.from('a'), .{}));
-    try testing.expect(key.matches(.from('A'), .{}));
-    try testing.expect(!key.matches(.from('A'), .{ .ctrl = true }));
+    try testing.expect(key.looseMatches(.from('a'), .{ .shift = true }));
+    try testing.expect(!key.looseMatches(.from('a'), .{}));
+    try testing.expect(key.looseMatches(.from('A'), .{}));
+    try testing.expect(!key.looseMatches(.from('A'), .{ .ctrl = true }));
 }
 
 test "matches 'shift+tab'" {
@@ -760,8 +787,8 @@ test "matches 'shift+tab'" {
         .codepoint = .tab,
         .mods = .{ .shift = true, .num_lock = true },
     };
-    try testing.expect(key.matches(.tab, .{ .shift = true }));
-    try testing.expect(!key.matches(.tab, .{}));
+    try testing.expect(key.looseMatches(.tab, .{ .shift = true }));
+    try testing.expect(!key.looseMatches(.tab, .{}));
 }
 
 test "matches 'shift+;'" {
@@ -771,14 +798,14 @@ test "matches 'shift+;'" {
         .mods = .{ .shift = true },
         .text = .from(":"),
     };
-    try testing.expect(key.matches(.from(';'), .{ .shift = true }));
-    try testing.expect(key.matches(.from(':'), .{}));
+    try testing.expect(key.looseMatches(.from(';'), .{ .shift = true }));
+    try testing.expect(key.looseMatches(.from(':'), .{}));
 
     const colon: Key = .{
         .codepoint = .from(':'),
         .mods = .{},
     };
-    try testing.expect(colon.matches(.from(':'), .{}));
+    try testing.expect(colon.looseMatches(.from(':'), .{}));
 }
 
 test "name_map" {

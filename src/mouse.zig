@@ -1,3 +1,5 @@
+const Switchable = @import("switchable.zig").Switchable;
+
 const Mouse = @This();
 
 col: u16,
@@ -5,26 +7,30 @@ row: u16,
 xoffset: u16 = 0,
 yoffset: u16 = 0,
 button: Button,
-mods: Modifiers,
 action: Action,
+mods: Modifiers,
 
-pub fn matches(self: *const Mouse, button: Button, action: Action, mods: Modifiers) bool {
-    return self.button == button and
-        self.action == action and
-        self.mods.eql(mods);
+const MouseMatching = Switchable(packed struct {
+    button: Button,
+    action: Action,
+    mods: Modifiers,
+});
+
+pub fn switchable(self: *const Mouse) MouseMatching.SwitchValue {
+    return MouseMatching.makeSwitchable(.{
+        .button = self.button,
+        .action = self.action,
+        .mods = self.mods,
+    });
 }
 
-pub const Shape = enum {
-    default,
-    text,
-    pointer,
-    help,
-    progress,
-    wait,
-    @"ew-resize",
-    @"ns-resize",
-    cell,
-};
+pub fn matches(button: Button, action: Action, mods: Modifiers) MouseMatching.SwitchValue {
+    return MouseMatching.makeSwitchable(.{
+        .button = button,
+        .action = action,
+        .mods = mods,
+    });
+}
 
 pub const Button = enum(u8) {
     left,
@@ -58,4 +64,16 @@ pub const Action = enum {
     release,
     motion,
     drag,
+};
+
+pub const Shape = enum {
+    default,
+    text,
+    pointer,
+    help,
+    progress,
+    wait,
+    @"ew-resize",
+    @"ns-resize",
+    cell,
 };

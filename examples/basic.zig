@@ -62,10 +62,11 @@ pub fn main(init: std.process.Init) !u8 {
         try tty.writer.print("{any}", .{event});
 
         switch (event) {
-            .key_press => |key| {
-                if (key.matches(.from('c'), .{ .ctrl = true })) {
+            .key_press => |key| switch (key.switchable()) {
+                zttio.Key.matches(.from('c'), .{ .ctrl = true }) => {
                     break;
-                } else if (key.matches(.up, .{})) {
+                },
+                zttio.Key.matches(.up, .{}) => {
                     pos_row = @max(5, pos_row - 1);
 
                     try tty.setStyling(&zttio.Styling{
@@ -75,7 +76,8 @@ pub fn main(init: std.process.Init) !u8 {
                     try tty.clearLine(.entire);
                     try tty.moveCursor(.{ .pos = .{ .row = pos_row } });
                     try tty.writer.print("{any}", .{event});
-                } else if (key.matches(.down, .{})) {
+                },
+                zttio.Key.matches(.down, .{}) => {
                     pos_row = @min(20, pos_row + 1);
 
                     try tty.setStyling(&zttio.Styling{
@@ -85,13 +87,16 @@ pub fn main(init: std.process.Init) !u8 {
                     try tty.clearLine(.entire);
                     try tty.moveCursor(.{ .pos = .{ .row = pos_row } });
                     try tty.writer.print("{any}", .{event});
-                }
+                },
+                else => {},
             },
+
             .winsize => |winsize| {
                 try tty.moveCursor(.{ .pos = .{ .row = 3 } });
                 try tty.clearLine(.entire);
                 try tty.writer.print("winsize: {any}", .{winsize});
             },
+
             else => {},
         }
 
