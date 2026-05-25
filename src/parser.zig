@@ -898,7 +898,7 @@ inline fn parseMouse(input: []const u8, full_input: []const u8) ParseResult {
         },
         .col = px -| 1,
         .row = py -| 1,
-        .type = blk: {
+        .action = blk: {
             if (motion and button != Mouse.Button.none) {
                 break :blk .drag;
             }
@@ -1329,7 +1329,7 @@ test "parse(CSI): mouse" {
             .col = 0,
             .row = 0,
             .button = .none,
-            .type = .motion,
+            .action = .motion,
             .mods = .{},
         } } },
         .n = input.len,
@@ -1364,7 +1364,7 @@ test "parse(CSI): xterm mouse (X10)" {
             .col = 0,
             .row = 0,
             .button = .left,
-            .type = .press,
+            .action = .press,
             .mods = .{},
         } } },
         .n = input.len,

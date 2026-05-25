@@ -281,7 +281,7 @@ fn read(self_ptr: *anyopaque) Adapter.ReadError!?ReadResult {
                 defer self.last_mouse_button_press = buttons;
                 const button_xor = self.last_mouse_button_press ^ buttons;
 
-                var event_type: Mouse.Type = .press;
+                var event_type: Mouse.Action = .press;
                 const btn: Mouse.Button = switch (button_xor) {
                     0x0000 => blk: {
                         // Check wheel event
@@ -345,7 +345,7 @@ fn read(self_ptr: *anyopaque) Adapter.ReadError!?ReadResult {
                     .col = @intCast(event.dwMousePosition.X), // Windows reports with 0 index
                     .row = @intCast(event.dwMousePosition.Y), // Windows reports with 0 index
                     .mods = mods,
-                    .type = event_type,
+                    .action = event_type,
                     .button = btn,
                 };
                 return ReadResult{ .event = .{ .mouse = mouse } };

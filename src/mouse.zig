@@ -6,7 +6,13 @@ xoffset: u16 = 0,
 yoffset: u16 = 0,
 button: Button,
 mods: Modifiers,
-type: Type,
+action: Action,
+
+pub fn matches(self: *const Mouse, button: Button, action: Action, mods: Modifiers) bool {
+    return self.button == button and
+        self.action == action and
+        self.mods.eql(mods);
+}
 
 pub const Shape = enum {
     default,
@@ -39,9 +45,15 @@ pub const Modifiers = packed struct(u3) {
     shift: bool = false,
     alt: bool = false,
     ctrl: bool = false,
+
+    pub fn eql(self: Modifiers, other: Modifiers) bool {
+        const a: u3 = @bitCast(self);
+        const b: u3 = @bitCast(other);
+        return a == b;
+    }
 };
 
-pub const Type = enum {
+pub const Action = enum {
     press,
     release,
     motion,
