@@ -17,7 +17,7 @@ const MouseMatching = Switchable(packed struct {
 });
 
 pub fn switchable(self: *const Mouse) MouseMatching.SwitchValue {
-    return MouseMatching.makeSwitchable(.{
+    return MouseMatching.makeSwitchable(&.{
         .button = self.button,
         .action = self.action,
         .mods = self.mods,
@@ -25,7 +25,7 @@ pub fn switchable(self: *const Mouse) MouseMatching.SwitchValue {
 }
 
 pub fn matches(button: Button, action: Action, mods: Modifiers) MouseMatching.SwitchValue {
-    return MouseMatching.makeSwitchable(.{
+    return MouseMatching.makeSwitchable(&.{
         .button = button,
         .action = action,
         .mods = mods,
