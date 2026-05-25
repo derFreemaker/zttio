@@ -59,7 +59,7 @@ pub const Modifiers = packed struct(u3) {
     }
 };
 
-pub const Action = enum {
+pub const Action = enum(u2) {
     press,
     release,
     motion,
