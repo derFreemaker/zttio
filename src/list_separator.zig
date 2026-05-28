@@ -20,10 +20,9 @@ pub fn get(self: *ListSeparator) ?[]const u8 {
     return self.sep;
 }
 
-pub fn writeToBuf(self: *ListSeparator, buf: []u8) usize {
+pub fn writeToBuf(self: *ListSeparator, buf: []u8) error{NoSpaceLeft}!usize {
     const sep = self.get() orelse return 0;
 
-    std.debug.assert(buf.len >= sep.len);
     @memcpy(buf[0..sep.len], sep);
     return sep.len;
 }
@@ -47,9 +46,9 @@ test writeToBuf {
 
     var buf: [4]u8 = undefined;
     @memset(buf[0..4], ' ');
-    _ = sep.writeToBuf(buf[0..]);
-    _ = sep.writeToBuf(buf[1..]);
-    _ = sep.writeToBuf(buf[2..]);
+    _ = try sep.writeToBuf(buf[0..]);
+    _ = try sep.writeToBuf(buf[1..]);
+    _ = try sep.writeToBuf(buf[2..]);
 
     try std.testing.expectEqualStrings(" ;; ", buf[0..4]);
 }
@@ -58,12 +57,12 @@ test print {
     var alloc_writer = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer alloc_writer.deinit();
     const writer = &alloc_writer.writer;
-    
+
     var sep = ListSeparator.init("👍");
-    
+
     try sep.print(writer);
     try sep.print(writer);
     try sep.print(writer);
-    
+
     try std.testing.expectEqualStrings("👍👍", alloc_writer.written());
 }

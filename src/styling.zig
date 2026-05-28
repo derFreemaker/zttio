@@ -11,9 +11,9 @@ inherit: bool = false,
 
 foreground: ?Color = null,
 background: ?Color = null,
-underline: ?Underline = null,
 thickness: ?Thickness = null,
 attrs: ?Attributes = null,
+underline: ?Underline = null,
 
 pub fn print(self: *const Styling, writer: *std.Io.Writer) !void {
     try writer.writeAll(CSI);
@@ -28,28 +28,29 @@ pub fn print(self: *const Styling, writer: *std.Io.Writer) !void {
     if (self.thickness) |thickness| {
         try sep.print(writer);
 
-        try writer.print("{d}", .{@intFromEnum(thickness)});
+        var buf: [8]u8 = undefined;
+        try writer.writeAll(thickness.printAsArg(&buf) catch unreachable);
     }
 
     if (self.attrs) |attrs| {
         try sep.print(writer);
 
-        var buf: [9]u8 = undefined;
-        try writer.writeAll(attrs.printAsArg(&buf));
+        var buf: [16]u8 = undefined;
+        try writer.writeAll(attrs.printAsArg(&buf) catch unreachable);
     }
 
     if (self.foreground) |fg| {
         try sep.print(writer);
 
         var buf: [16]u8 = undefined;
-        try writer.writeAll(fg.printAsArg(&buf, .foreground));
+        try writer.writeAll(fg.printAsArg(&buf, .foreground) catch unreachable);
     }
 
     if (self.background) |bg| {
         try sep.print(writer);
 
         var buf: [16]u8 = undefined;
-        try writer.writeAll(bg.printAsArg(&buf, .background));
+        try writer.writeAll(bg.printAsArg(&buf, .background) catch unreachable);
     }
 
     try writer.writeByte('m');
@@ -59,7 +60,6 @@ pub fn print(self: *const Styling, writer: *std.Io.Writer) !void {
         // colored/styled underlines at least show an underline
         try writer.writeAll(CSI ++ "4m");
 
-        // wezterm seems to discard the escape sequence when finding an unknown number
         if (underline.color != null or underline.style != .single) {
             var buf: [20]u8 = undefined;
             try writer.print(CSI ++ "{s}m", .{underline.printAsArg(&buf)});
@@ -68,103 +68,12 @@ pub fn print(self: *const Styling, writer: *std.Io.Writer) !void {
 }
 
 // redirect
-pub fn format(self: Styling, writer: *std.Io.Writer) !void {
-    return self.print(writer);
-}
-
-pub const Layer = enum {
-    foreground,
-    background,
-    underline,
-
-    pub fn modifier(self: Layer) u8 {
-        return switch (self) {
-            .foreground => 0,
-            .background => 10,
-            .underline => 20,
-        };
-    }
-
-    pub fn index(self: Layer) u8 {
-        return 38 + self.modifier();
-    }
-
-    pub fn reset(self: Layer, writer: *std.Io.Writer) !void {
-        return writer.print(CSI ++ "{d}m", .{self.index() + 1});
-    }
-};
-
-pub const Thickness = enum(u2) {
-    pub const reset = CSI ++ "22m";
-
-    bold = 1,
-    dim = 2,
-};
-
-pub const Attributes = packed struct {
-    pub const italic_reset = CSI ++ "23m";
-    pub const blink_reset = CSI ++ "25m";
-
-    pub const reverse_reset = CSI ++ "27m";
-    pub const hidden_reset = CSI ++ "28m";
-    pub const strikethrough_reset = CSI ++ "29m";
-
-    italic: bool = false, // 3,
-    blink: bool = false, // 5,
-
-    reverse: bool = false, // 7,
-    hidden: bool = false, // 8
-    strikethrough: bool = false, // 9
-
-    pub fn printAsArg(self: Attributes, buf: []u8) []const u8 {
-        std.debug.assert(buf.len >= 9);
-
-        var i: usize = 0;
-        var sep = ListSeparator.init(";");
-
-        if (self.italic) {
-            i += sep.writeToBuf(buf[i..]);
-
-            buf[i] = '3';
-            i += 1;
-        }
-
-        if (self.blink) {
-            i += sep.writeToBuf(buf[i..]);
-
-            buf[i] = '5';
-            i += 1;
-        }
-
-        if (self.reverse) {
-            i += sep.writeToBuf(buf[i..]);
-
-            buf[i] = '7';
-            i += 1;
-        }
-
-        if (self.hidden) {
-            i += sep.writeToBuf(buf[i..]);
-
-            buf[i] = '8';
-            i += 1;
-        }
-
-        if (self.strikethrough) {
-            i += sep.writeToBuf(buf[i..]);
-
-            buf[i] = '9';
-            i += 1;
-        }
-
-        return buf[0..i];
-    }
-};
+pub const format = print;
 
 pub const Color = union(enum) {
     c8: Color8,
     b8: u8,
-    rgb8: RGB,
+    rgb8: Rgb,
 
     pub fn normal(c8: Color8) Color {
         return Color{ .c8 = c8 };
@@ -182,34 +91,30 @@ pub const Color = union(enum) {
         } };
     }
 
-    fn printAsArg(self: Color, buf: []u8, layer: Layer) []const u8 {
+    pub fn printAsArg(self: Color, buf: []u8, layer: Layer) error{NoSpaceLeft}![]u8 {
         switch (self) {
             .c8 => |c8| {
-                std.debug.assert(buf.len >= 2);
-                return std.fmt.bufPrint(buf, "{d}", .{@intFromEnum(c8) + layer.modifier()}) catch unreachable;
+                return try std.fmt.bufPrint(buf, "{d}", .{@intFromEnum(c8) + layer.modifier()});
             },
             .b8 => |n| {
-                std.debug.assert(buf.len >= 8);
-                return std.fmt.bufPrint(buf, "{d};5;{d}", .{ layer.index(), n }) catch unreachable;
+                return try std.fmt.bufPrint(buf, "{d};5;{d}", .{ layer.index(), n });
             },
             .rgb8 => |rgb8| {
-                std.debug.assert(buf.len >= 16);
-                return std.fmt.bufPrint(buf, "{d};2;{d};{d};{d}", .{ layer.index(), rgb8.r, rgb8.g, rgb8.b }) catch unreachable;
+                return try std.fmt.bufPrint(buf, "{d};2;{d};{d};{d}", .{ layer.index(), rgb8.r, rgb8.g, rgb8.b });
             },
         }
     }
 
-    pub fn print(self: Color, buf: []u8, layer: Layer) error{NoSpaceLeft}![]const u8 {
-        std.debug.assert(buf.len >= 19);
+    pub fn print(self: Color, writer: *std.Io.Writer, layer: Layer) std.Io.Writer.Error!void {
+        try writer.writeAll(CSI);
 
-        @memcpy(buf[0..2], CSI);
-        const n = self.printAsArg(buf[2..], layer).len;
-        buf[2 + n] = 'm';
+        var buf: [16]u8 = undefined;
+        try writer.writeAll(self.printAsArg(buf[2..], layer) catch unreachable);
 
-        return buf[0 .. n + 3];
+        try writer.writeByte('m');
     }
 
-    pub const Color8 = enum(u7) {
+    pub const Color8 = enum(u8) {
         default = 39,
 
         black = 30,
@@ -231,48 +136,176 @@ pub const Color = union(enum) {
         bright_white,
     };
 
-    pub const RGB = struct {
+    pub const Rgb = struct {
         r: u8,
         g: u8,
         b: u8,
 
-        pub fn init(r: u8, g: u8, b: u8) RGB {
-            return RGB{ .r = r, .g = g, .b = b };
+        pub fn init(r: u8, g: u8, b: u8) Rgb {
+            return Rgb{ .r = r, .g = g, .b = b };
+        }
+    };
+
+    pub const Layer = enum {
+        foreground,
+        background,
+        underline,
+
+        pub fn modifier(self: Layer) u8 {
+            return switch (self) {
+                .foreground => 0,
+                .background => 10,
+                .underline => 20,
+            };
+        }
+
+        pub fn index(self: Layer) u8 {
+            return 38 + self.modifier();
+        }
+
+        pub fn reset(self: Layer, writer: *std.Io.Writer) !void {
+            return writer.print(CSI ++ "{d}m", .{self.index() + 1});
         }
     };
 };
 
-pub const Underline = struct {
-    // Underlines
-    // pub const ul_off = CSI ++ "24m"; // NOTE: this could be \x1b[4:0m but is not as widely supported
-    // pub const ul_single = CSI ++ "4m";
-    // pub const ul_double = CSI ++ "4:2m";
-    // pub const ul_curly = CSI ++ "4:3m";
-    // pub const ul_dotted = CSI ++ "4:4m";
-    // pub const ul_dashed = CSI ++ "4:5m";
+pub const Thickness = enum(u2) {
+    pub const reset = CSI ++ "22m";
 
-    pub const reset = CSI ++ "24m"; // NOTE: this could be 'CSI 4:0m' but is not as widely supported
+    bold = 1,
+    dim = 2,
+
+    pub fn printAsArg(self: Thickness, buf: []u8) error{NoSpaceLeft}![]const u8 {
+        return std.fmt.bufPrint(buf, "{d}", .{@intFromEnum(self)});
+    }
+
+    pub fn print(self: Thickness, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+        try writer.writeAll(CSI);
+        try writer.print("{d}", .{@intFromEnum(self)});
+        try writer.writeByte('m');
+    }
+};
+
+pub const Attributes = packed struct {
+    pub const italic_reset = CSI ++ "23m";
+    pub const blink_reset = CSI ++ "25m";
+
+    pub const reverse_reset = CSI ++ "27m";
+    pub const hidden_reset = CSI ++ "28m";
+    pub const strikethrough_reset = CSI ++ "29m";
+
+    italic: bool = false, // 3,
+
+    blink: bool = false, // 5,
+
+    reverse: bool = false, // 7,
+    hidden: bool = false, // 8
+    strikethrough: bool = false, // 9
+
+    pub fn printAsArg(self: Attributes, buf: []u8) error{NoSpaceLeft}![]u8 {
+        var i: usize = 0;
+        var sep = ListSeparator.init(";");
+
+        inline for (@typeInfo(Attributes).@"struct".fields) |field| {
+            if (@as(bool, @field(self, field.name))) {
+                i += try sep.writeToBuf(buf[i..]);
+
+                if (buf.len < i) {
+                    return error.NoSpaceLeft;
+                }
+                buf[i] = comptime blk: {
+                    if (std.mem.eql(u8, field.name, "italic")) {
+                        break :blk '3';
+                    }
+
+                    if (std.mem.eql(u8, field.name, "blink")) {
+                        break :blk '5';
+                    }
+
+                    if (std.mem.eql(u8, field.name, "reverse")) {
+                        break :blk '7';
+                    }
+                    if (std.mem.eql(u8, field.name, "hidden")) {
+                        break :blk '8';
+                    }
+                    if (std.mem.eql(u8, field.name, "strikethrough")) {
+                        break :blk '9';
+                    }
+
+                    unreachable;
+                };
+                i += 1;
+            }
+        }
+
+        return buf[0..i];
+    }
+
+    pub fn print(self: Attributes, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+        try writer.writeAll(CSI);
+
+        var buf: [16]u8 = undefined;
+        try writer.writeAll(self.printAsArg(&buf) catch unreachable);
+
+        try writer.writeByte('m');
+    }
+};
+
+test Attributes {
+    const attributes = Attributes{
+        .italic = true,
+
+        .blink = true,
+
+        .reverse = true,
+        .hidden = true,
+        .strikethrough = true,
+    };
+    const expected = "3;5;7;8;9";
+
+    var buf: [16]u8 = undefined;
+    const actual = try attributes.printAsArg(&buf);
+
+    try std.testing.expectEqualStrings(expected, actual);
+}
+
+pub const Underline = struct {
+    // NOTE: this could be 'CSI 4:0m' but is not as widely supported
+    pub const reset = CSI ++ "24m";
 
     color: ?Color = null,
     style: Style = .single,
 
-    pub fn printAsArg(self: Underline, buf: []u8) []const u8 {
-        std.debug.assert(buf.len >= 20);
-
+    pub fn printAsArg(self: Underline, buf: []u8) error{NoSpaceLeft}![]const u8 {
         var i: usize = 0;
 
-        const style = self.style.print();
+        const style = self.style.arg();
         i += style.len;
+        if (buf.len < i) {
+            return error.NoSpaceLeft;
+        }
         @memcpy(buf[0..i], style);
 
         if (self.color) |color| {
+            if (buf.len <= i) {
+                return error.NoSpaceLeft;
+            }
             buf[i] = ';';
             i += 1;
 
-            i += color.printAsArg(buf[i..], .underline).len;
+            i += try color.printAsArg(buf[i..], .underline).len;
         }
 
         return buf[0..i];
+    }
+
+    pub fn print(self: Underline, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+        try writer.writeAll(CSI);
+
+        var buf: [32]u8 = undefined;
+        try writer.writeAll(self.printAsArg(&buf) catch unreachable);
+
+        try writer.writeByte('m');
     }
 
     pub const Style = enum {
@@ -282,7 +315,7 @@ pub const Underline = struct {
         dotted,
         dashed,
 
-        pub fn print(self: Style) []const u8 {
+        pub fn arg(self: Style) []const u8 {
             return switch (self) {
                 .single => "4",
                 .double => "4:2",
@@ -290,6 +323,12 @@ pub const Underline = struct {
                 .dotted => "4:4",
                 .dashed => "4:5",
             };
+        }
+
+        pub fn print(self: Style, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+            try writer.writeAll(CSI);
+            try writer.writeAll(self.arg());
+            try writer.writeByte('m');
         }
     };
 };
