@@ -293,7 +293,7 @@ pub const Underline = struct {
             buf[i] = ';';
             i += 1;
 
-            i += try color.printAsArg(buf[i..], .underline).len;
+            i += (try color.printAsArg(buf[i..], .underline)).len;
         }
 
         return buf[0..i];
