@@ -1,4 +1,6 @@
 const std = @import("std");
+const testing = std.testing;
+
 const uucode = @import("uucode");
 
 const Switchable = @import("switchable.zig").Switchable;
@@ -161,18 +163,18 @@ pub fn matchExact(self: Key, cp: KeyCP, mods: Modifiers) bool {
 
 /// True if the key is a single modifier (ie: left_shift)
 pub fn isModifier(self: Key) bool {
-    return self.codepoint == left_shift or
-        self.codepoint == left_alt or
-        self.codepoint == left_super or
-        self.codepoint == left_hyper or
-        self.codepoint == left_control or
-        self.codepoint == left_meta or
-        self.codepoint == right_shift or
-        self.codepoint == right_alt or
-        self.codepoint == right_super or
-        self.codepoint == right_hyper or
-        self.codepoint == right_control or
-        self.codepoint == right_meta;
+    return self.codepoint == .left_shift or
+        self.codepoint == .left_alt or
+        self.codepoint == .left_super or
+        self.codepoint == .left_hyper or
+        self.codepoint == .left_control or
+        self.codepoint == .left_meta or
+        self.codepoint == .right_shift or
+        self.codepoint == .right_alt or
+        self.codepoint == .right_super or
+        self.codepoint == .right_hyper or
+        self.codepoint == .right_control or
+        self.codepoint == .right_meta;
 }
 
 pub const KeyText = union(enum) {
@@ -756,8 +758,6 @@ pub const name_map = blk: {
         .{ "iso_level_5_shift", iso_level_5_shift },
     });
 };
-
-const testing = std.testing;
 
 test "matches 'a'" {
     const key: Key = .{

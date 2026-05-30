@@ -4,13 +4,12 @@ const builtin = @import("builtin");
 const Adapter = @import("adapter.zig");
 const ctlseqs = @import("ctlseqs.zig");
 const KittyGraphics = ctlseqs.KittyGraphics;
-const GraphicsSource = @import("graphics/source.zig").Source;
 const Event = @import("event.zig").Event;
-const Winsize = @import("winsize.zig").Winsize;
-const TerminalCapabilities = @import("terminal_capabilities.zig");
+const GraphicsSource = @import("graphics/source.zig").Source;
 const gwidth = @import("gwidth.zig");
-
 const Parser = @import("parser.zig");
+const TerminalCapabilities = @import("terminal_capabilities.zig");
+const Winsize = @import("winsize.zig").Winsize;
 
 const log = std.log.scoped(.zttio_tty);
 
@@ -20,6 +19,7 @@ const Tty = @This();
 
 allocator: std.mem.Allocator,
 
+adapter: Adapter,
 parser: Parser,
 writer: *std.Io.Writer,
 
@@ -28,26 +28,8 @@ caps: TerminalCapabilities,
 
 winsize: Winsize,
 
-pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, adapter: Adapter, opts: CreateOptions) error{ UnableToEnableReader, UnableToGetWinsize, WriteFailed }!Tty {
-    // switch (builtin.os.tag) {
-    //     .windows => {},
-    //     else => {
-    //         if (!builtin.is_test and !ptr.caps.in_band_winsize) {
-    //             try SigwinchHandling.notifyWinsize(.{
-    //                 .context = ptr,
-    //                 .callback = struct {
-    //                     pub fn call(context: *anyopaque) void {
-    //                         const self: *Tty = @ptrCast(@alignCast(context));
-    //                         const winsize = InternalReader.getWinsize(self.stdin_handle) catch return;
-    //                         self.reader.postEvent(.{ .winsize = winsize });
-    //                     }
-    //                 }.call,
-    //             });
-    //         }
-    //     },
-    // }
-
-    _ = adapter.enable() catch return error.UnableToEnableReader;
+pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, adapter: Adapter, opts: CreateOptions) error{ UnableToEnableAdapter, UnableToGetWinsize, WriteFailed }!Tty {
+    _ = adapter.enable() catch return error.UnableToEnableAdapter;
 
     const winsize = adapter.getWinsize() catch return error.UnableToGetWinsize;
 
@@ -74,12 +56,13 @@ pub fn init(allocator: std.mem.Allocator, event_allocator: std.mem.Allocator, ad
     return Tty{
         .allocator = allocator,
 
-        .writer = writer,
+        .adapter = adapter,
         .parser = Parser.init(
             allocator,
             event_allocator,
             adapter,
         ),
+        .writer = writer,
 
         .opts = Options{
             .kitty_keyboard_flags = opts.kitty_keyboard_flags,
@@ -116,8 +99,8 @@ pub inline fn getWinsize(self: *const Tty) Winsize {
     return self.winsize;
 }
 
-pub inline fn updateWinsize(self: *Tty) Parser.GetWinsizeError!Winsize {
-    const winsize = try self.parser.getWinsize();
+pub inline fn updateWinsize(self: *Tty) Adapter.GetWinsizeError!Winsize {
+    const winsize = try self.adapter.getWinsize();
     self.winsize = winsize;
     return winsize;
 }

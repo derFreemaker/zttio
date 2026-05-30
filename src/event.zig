@@ -1,11 +1,11 @@
 const std = @import("std");
 
+const Color = @import("color.zig").Color;
+const KittyGraphics = @import("graphics/kitty_graphics.zig");
 const Key = @import("key.zig");
 const Mouse = @import("mouse.zig");
-const Color = @import("color.zig").Color;
-const Winsize = @import("winsize.zig").Winsize;
 const MultiCursor = @import("multi_cursor.zig");
-const KittyGraphics = @import("graphics/kitty_graphics.zig");
+const Winsize = @import("winsize.zig").Winsize;
 
 pub const Event = union(enum) {
     key_press: Key,

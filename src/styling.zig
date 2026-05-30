@@ -62,7 +62,7 @@ pub fn print(self: *const Styling, writer: *std.Io.Writer) !void {
 
         if (underline.color != null or underline.style != .single) {
             var buf: [20]u8 = undefined;
-            try writer.print(CSI ++ "{s}m", .{underline.printAsArg(&buf)});
+            try writer.print(CSI ++ "{s}m", .{underline.printAsArg(&buf) catch unreachable});
         }
     }
 }

@@ -1,13 +1,14 @@
 const std = @import("std");
+
 const zigimg = @import("zigimg");
 
 pub const Source = union(enum) {
     img: zigimg.Image,
     buf: []const u8,
-    file: std.fs.File,
+    file: std.Io.File,
     path: []const u8,
 
-    pub const Error = std.fs.File.OpenError || zigimg.Image.ReadError || zigimg.Image.ConvertError;
+    pub const Error = std.Io.File.OpenError || zigimg.Image.ReadError || zigimg.Image.ConvertError;
 
     pub fn getImage(self: *const Source, allocator: std.mem.Allocator) Source.Error!zigimg.Image {
         const img: zigimg.Image = blk: switch (self.*) {
