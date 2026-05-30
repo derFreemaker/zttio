@@ -19,8 +19,8 @@ pub const Adapters = struct {
         else => PosixAdapter,
     };
 
-    pub const PosixAdapter = if (builtin.is_test and builtin.os.tag != .windows) @import("adapters/posix_adapter.zig") else void;
-    pub const WinAdapter = if (builtin.is_test and builtin.os.tag == .windows) @import("adapters/win_adapter.zig") else void;
+    pub const PosixAdapter = if (!builtin.is_test) @import("adapters/posix_adapter.zig") else void;
+    pub const WinAdapter = if (!builtin.is_test) @import("adapters/win_adapter.zig") else void;
 };
 
 test {
