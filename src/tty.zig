@@ -240,27 +240,21 @@ pub fn moveCursor(self: *Tty, move_cursor: MoveCursor) std.Io.Writer.Error!void 
             return cursor.moveTo(self.writer, pos.row, pos.column);
         },
         .up => |x| {
-            if (x == 0) return;
             return cursor.moveUp(self.writer, x);
         },
         .down => |x| {
-            if (x == 0) return;
             return cursor.moveDown(self.writer, x);
         },
         .left => |x| {
-            if (x == 0) return;
             return cursor.moveLeft(self.writer, x);
         },
         .right => |x| {
-            if (x == 0) return;
             return cursor.moveRight(self.writer, x);
         },
         .front_up => |x| {
-            if (x == 0) continue :move .front;
             return cursor.moveFrontUp(self.writer, x);
         },
         .front_down => |x| {
-            if (x == 0) continue :move .front;
             return cursor.moveFrontDown(self.writer, x);
         },
         .column => |x| {
@@ -271,10 +265,10 @@ pub fn moveCursor(self: *Tty, move_cursor: MoveCursor) std.Io.Writer.Error!void 
         },
 
         .front => {
-            continue :move .{ .column = 0 };
+            continue :move MoveCursor{ .column = 0 };
         },
         .end => {
-            continue :move .{ .column = self.getWinsize().cols };
+            continue :move MoveCursor{ .column = self.getWinsize().cols };
         },
     }
 }

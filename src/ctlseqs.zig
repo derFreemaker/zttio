@@ -1,9 +1,3 @@
-const std = @import("std");
-const assert = std.debug.assert;
-
-const ListSeparator = @import("list_separator.zig");
-const Key = @import("key.zig");
-
 pub const ESC = "\x1b";
 pub const SS2 = ESC ++ "N";
 pub const SS3 = ESC ++ "O";
@@ -33,8 +27,6 @@ pub const Queries = struct {
     pub const kitty_multi_cursor = CSI ++ "> q";
 };
 
-pub const Styling = @import("styling.zig");
-
 pub const Cursor = struct {
     pub const position_request = CSI ++ "6n";
 
@@ -46,33 +38,57 @@ pub const Cursor = struct {
     }
 
     pub const move_up_x = CSI ++ "{d}A";
-    pub fn moveUp(writer: *std.Io.Writer, num: usize) std.Io.Writer.Error!void {
-        return writer.print(move_up_x, .{num});
+    pub fn moveUp(writer: *std.Io.Writer, n: usize) std.Io.Writer.Error!void {
+        if (n == 0) {
+            return;
+        }
+
+        return writer.print(move_up_x, .{n});
     }
 
     pub const move_down_x = CSI ++ "{d}B";
-    pub fn moveDown(writer: *std.Io.Writer, num: usize) std.Io.Writer.Error!void {
-        return writer.print(move_down_x, .{num});
+    pub fn moveDown(writer: *std.Io.Writer, n: usize) std.Io.Writer.Error!void {
+        if (n == 0) {
+            return;
+        }
+
+        return writer.print(move_down_x, .{n});
     }
 
     pub const move_right_x = CSI ++ "{d}C";
-    pub fn moveRight(writer: *std.Io.Writer, num: usize) std.Io.Writer.Error!void {
-        return writer.print(move_right_x, .{num});
+    pub fn moveRight(writer: *std.Io.Writer, n: usize) std.Io.Writer.Error!void {
+        if (n == 0) {
+            return;
+        }
+
+        return writer.print(move_right_x, .{n});
     }
 
     pub const move_left_x = CSI ++ "{d}D";
-    pub fn moveLeft(writer: *std.Io.Writer, num: usize) std.Io.Writer.Error!void {
-        return writer.print(move_left_x, .{num});
+    pub fn moveLeft(writer: *std.Io.Writer, n: usize) std.Io.Writer.Error!void {
+        if (n == 0) {
+            return;
+        }
+
+        return writer.print(move_left_x, .{n});
     }
 
     pub const move_front_down_x = CSI ++ "{d}E";
-    pub fn moveFrontDown(writer: *std.Io.Writer, num: usize) std.Io.Writer.Error!void {
-        return writer.print(move_front_down_x, .{num});
+    pub fn moveFrontDown(writer: *std.Io.Writer, n: usize) std.Io.Writer.Error!void {
+        if (n == 0) {
+            return writer.writeByte('\r');
+        }
+
+        return writer.print(move_front_down_x, .{n});
     }
 
     pub const move_front_up_x = CSI ++ "{d}F";
-    pub fn moveFrontUp(writer: *std.Io.Writer, num: usize) std.Io.Writer.Error!void {
-        return writer.print(move_front_up_x, .{num});
+    pub fn moveFrontUp(writer: *std.Io.Writer, n: usize) std.Io.Writer.Error!void {
+        if (n == 0) {
+            return writer.writeByte('\r');
+        }
+
+        return writer.print(move_front_up_x, .{n});
     }
 
     pub const move_to_column = CSI ++ "{d}G";
@@ -101,8 +117,6 @@ pub const Cursor = struct {
         steady_bar = 6,
     };
 };
-
-pub const MultiCursor = @import("multi_cursor.zig");
 
 pub const Erase = struct {
     pub const cursor_to_screen_end = CSI ++ "0J";
@@ -334,8 +348,6 @@ pub const Text = struct {
     }
 };
 
-pub const KittyGraphics = @import("graphics/kitty_graphics.zig");
-
 // Color control sequences
 // pub const osc4_query = "\x1b]4;{d};?\x1b\\"; // color index {d}
 // pub const osc4_reset = "\x1b]104\x1b\\"; // this resets _all_ color indexes
@@ -348,3 +360,12 @@ pub const KittyGraphics = @import("graphics/kitty_graphics.zig");
 // pub const osc12_query = "\x1b]12;?\x1b\\"; // cursor color
 // pub const osc12_set = "\x1b]12;rgb:{x:0>2}{x:0>2}/{x:0>2}{x:0>2}/{x:0>2}{x:0>2}\x1b\\"; // set terminal cursor color
 // pub const osc12_reset = "\x1b]112\x1b\\"; // reset cursor to terminal default
+
+const std = @import("std");
+const assert = std.debug.assert;
+
+pub const KittyGraphics = @import("graphics/kitty_graphics.zig");
+const Key = @import("key.zig");
+const ListSeparator = @import("list_separator.zig");
+pub const MultiCursor = @import("multi_cursor.zig");
+pub const Styling = @import("styling.zig");
