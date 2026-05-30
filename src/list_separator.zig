@@ -22,6 +22,9 @@ pub fn get(self: *ListSeparator) ?[]const u8 {
 
 pub fn writeToBuf(self: *ListSeparator, buf: []u8) error{NoSpaceLeft}!usize {
     const sep = self.get() orelse return 0;
+    if (buf.len < sep.len) {
+        return error.NoSpaceLeft;
+    }
 
     @memcpy(buf[0..sep.len], sep);
     return sep.len;
