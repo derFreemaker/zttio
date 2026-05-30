@@ -194,10 +194,14 @@ pub const Attributes = packed struct {
     pub const hidden_reset = CSI ++ "28m";
     pub const strikethrough_reset = CSI ++ "29m";
 
+    // 1; 2 -> Thickness
+
     italic: bool = false, // 3,
 
-    blink: bool = false, // 5,
+    // 4 -> Underline
 
+    blink: bool = false, // 5,
+    rapid_blink: bool = false, // 6,
     reverse: bool = false, // 7,
     hidden: bool = false, // 8
     strikethrough: bool = false, // 9
@@ -221,7 +225,9 @@ pub const Attributes = packed struct {
                     if (std.mem.eql(u8, field.name, "blink")) {
                         break :blk '5';
                     }
-
+                    if (std.mem.eql(u8, field.name, "rapid_blink")) {
+                        break :blk '6';
+                    }
                     if (std.mem.eql(u8, field.name, "reverse")) {
                         break :blk '7';
                     }
