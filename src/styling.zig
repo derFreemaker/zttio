@@ -8,6 +8,14 @@ pub const reset = CSI ++ "0m";
 
 const Styling = @This();
 
+pub const inherit = Styling{
+    .fg = .inherit,
+    .bg = .inherit,
+    .thickness = .inherit,
+    .attrs = .inherit,
+    .underline = .inherit,
+};
+
 fg: Color = .{ .c8 = .default },
 bg: Color = .{ .c8 = .default },
 thickness: Thickness = .default,
@@ -300,6 +308,16 @@ pub const Attributes = packed struct(u12) {
     pub const hidden_reset = CSI ++ "28m";
     pub const strikethrough_reset = CSI ++ "29m";
 
+    pub const inherit = Attributes{
+        .italic = .inherit,
+
+        .blink = .inherit,
+        .rapid_blink = .inherit,
+        .reverse = .inherit,
+        .hidden = .inherit,
+        .strikethrough = .inherit,
+    };
+
     pub const Map = std.StaticStringMap(u8).initComptime(.{
         // 1 -> Bold (Thickness)
         // 2 -> Dim  (Thickness)
@@ -313,6 +331,7 @@ pub const Attributes = packed struct(u12) {
     });
 
     italic: TriState = .unset,
+
     blink: TriState = .unset,
     rapid_blink: TriState = .unset,
     reverse: TriState = .unset,
@@ -442,6 +461,11 @@ test Attributes {
 pub const Underline = struct {
     // NOTE: this could be 'CSI 4:0m' but is not as widely supported
     pub const reset = CSI ++ "24m";
+
+    pub const inherit = Underline{
+        .color = .inherit,
+        .style = .inherit,
+    };
 
     color: Color = .{ .c8 = .default },
     style: UnderlineStyle = .none,
