@@ -8,9 +8,9 @@ pub const reset = CSI ++ "0m";
 
 const Styling = @This();
 
-fg: Color = .inherit,
-bg: Color = .inherit,
-thickness: Thickness = .inherit,
+fg: Color = .{ .c8 = .default },
+bg: Color = .{ .c8 = .default },
+thickness: Thickness = .default,
 attrs: Attributes = .{},
 underline: Underline = .{},
 
@@ -79,8 +79,7 @@ pub fn print(self: *const Styling, writer: *std.Io.Writer) !void {
     if (self.thickness != .inherit) {
         try sep.print(writer);
 
-        var buf: [1]u8 = undefined;
-        try writer.writeAll(self.thickness.printAsArg(&buf) catch unreachable);
+        try writer.writeAll(self.thickness.arg());
     }
 
     if (!self.attrs.isInherit()) {
@@ -265,20 +264,18 @@ pub const Color = union(enum(u2)) {
 pub const Thickness = enum(u2) {
     pub const reset = CSI ++ "22m";
 
-    inherit = 0,
-    bold = 1,
-    dim = 2,
+    inherit,
+    default,
+    bold,
+    dim,
 
-    pub fn printAsArg(self: Thickness, buf: []u8) BufPrintError![]u8 {
-        if (self == .inherit) {
-            return &.{};
-        }
-
-        if (buf.len < 1) {
-            return BufPrintError.NoSpaceLeft;
-        }
-        buf[0] = @as(u8, @intFromEnum(self)) + 0x30; // offset into asci
-        return buf[0..0];
+    pub fn arg(self: Thickness) []const u8 {
+        return switch (self) {
+            .inherit => "",
+            .default => "22",
+            .bold => "1",
+            .dim => "2",
+        };
     }
 
     pub fn print(self: Thickness, writer: *std.Io.Writer) std.Io.Writer.Error!void {
@@ -287,8 +284,7 @@ pub const Thickness = enum(u2) {
         }
 
         try writer.writeAll(CSI);
-        var buf: [1]u8 = undefined;
-        try writer.writeAll(self.printAsArg(&buf) catch unreachable);
+        try writer.writeAll(self.arg());
         try writer.writeByte('m');
     }
 };
@@ -316,12 +312,12 @@ pub const Attributes = packed struct(u12) {
         .{ "strikethrough", '9' },
     });
 
-    italic: TriState = .inherit,
-    blink: TriState = .inherit,
-    rapid_blink: TriState = .inherit,
-    reverse: TriState = .inherit,
-    hidden: TriState = .inherit,
-    strikethrough: TriState = .inherit,
+    italic: TriState = .unset,
+    blink: TriState = .unset,
+    rapid_blink: TriState = .unset,
+    reverse: TriState = .unset,
+    hidden: TriState = .unset,
+    strikethrough: TriState = .unset,
 
     pub inline fn isInherit(self: Attributes) bool {
         return @as(@typeInfo(Attributes).@"struct".backing_integer.?, @bitCast(self)) == 0;
@@ -447,8 +443,8 @@ pub const Underline = struct {
     // NOTE: this could be 'CSI 4:0m' but is not as widely supported
     pub const reset = CSI ++ "24m";
 
-    color: Color = .inherit,
-    style: UnderlineStyle = .inherit,
+    color: Color = .{ .c8 = .default },
+    style: UnderlineStyle = .none,
 
     pub inline fn isInherit(self: Underline) bool {
         return self.color == .inherit and self.style == .inherit;
@@ -508,6 +504,7 @@ pub const Underline = struct {
 
     pub const UnderlineStyle = enum {
         inherit,
+        none,
         single,
         double,
         curly,
@@ -517,6 +514,7 @@ pub const Underline = struct {
         pub fn arg(self: UnderlineStyle) []const u8 {
             return switch (self) {
                 .inherit => "",
+                .none => "24",
                 .single => "4",
                 .double => "4:2",
                 .curly => "4:3",
@@ -526,7 +524,7 @@ pub const Underline = struct {
         }
 
         pub fn print(self: UnderlineStyle, writer: *std.Io.Writer) std.Io.Writer.Error!void {
-            if (self != .inherit) {
+            if (self == .inherit) {
                 return;
             }
 
@@ -547,12 +545,14 @@ test "Styling: merge" {
         .thickness = .dim,
     };
     const b = Styling{
+        .fg = .inherit,
         .bg = .{ .c8 = .bright_cyan },
+        .thickness = .bold,
         .attrs = .{
             .italic = .set,
+            .rapid_blink = .inherit,
             .reverse = .unset,
         },
-        .thickness = .bold,
         .underline = .{ .style = .dotted },
     };
     const actual = a.merge(&b);
