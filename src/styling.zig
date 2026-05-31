@@ -218,7 +218,7 @@ pub const Color = union(enum(u2)) {
             return Rgb{ .r = r, .g = g, .b = b };
         }
 
-        pub inline fn eql(self: Rgb, other: Rgb) {
+        pub inline fn eql(self: Rgb, other: Rgb) bool {
             return @as(u24, @bitCast(self)) == @as(u24, @bitCast(other));
         }
     };
@@ -316,11 +316,11 @@ pub const Attributes = packed struct(u12) {
     }
 
     pub fn diff(self: Attributes, other: Attributes) Attributes {
-        const result = Attributes{};
+        var result = Attributes{};
 
         inline for (@typeInfo(Attributes).@"struct".fields) |field| {
             if (@field(self, field.name) != @field(other, field.name)) {
-                @field(result, field.name) = @field(other.attrs, field.name);
+                @field(result, field.name) = @field(other, field.name);
             }
         }
 
