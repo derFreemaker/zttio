@@ -8,28 +8,62 @@ pub const reset = CSI ++ "0m";
 
 const Styling = @This();
 
-foreground: Color = .inherit,
-background: Color = .inherit,
+fg: Color = .inherit,
+bg: Color = .inherit,
 thickness: Thickness = .inherit,
 attrs: Attributes = .{},
 underline: Underline = .{},
+
+pub fn eql(self: Styling, other: Styling) bool {
+    if (!self.fg.eql(other.fg)) {
+        return false;
+    }
+
+    if (!self.bg.eql(other.bg)) {
+        return false;
+    }
+
+    if (self.thickness != other.thickness) {
+        return false;
+    }
+
+    if (!self.attrs.eql(other.attrs)) {
+        return false;
+    }
+
+    if (!self.underline.eql(other.underline)) {
+        return false;
+    }
+
+    return true;
+}
+
+pub inline fn diff(self: Styling, other: Styling) Styling {
+    return Styling{
+        .fg = self.fg.diff(other.fg),
+        .bg = self.bg.diff(other.bg),
+        .thickness = if (self.thickness == other.thickness) Thickness.inherit else other.thickness,
+        .attrs = self.attrs.diff(other.attrs),
+        .underline = self.underline.diff(other.underline),
+    };
+}
 
 pub fn print(self: *const Styling, writer: *std.Io.Writer) !void {
     try writer.writeAll(CSI);
     var sep = ListSeparator.init(";");
 
-    if (self.foreground != .inherit) {
+    if (self.fg != .inherit) {
         try sep.print(writer);
 
         var buf: [16]u8 = undefined;
-        try writer.writeAll(self.foreground.printAsArg(&buf, .foreground) catch unreachable);
+        try writer.writeAll(self.fg.printAsArg(&buf, .foreground) catch unreachable);
     }
 
-    if (self.background != .inherit) {
+    if (self.bg != .inherit) {
         try sep.print(writer);
 
         var buf: [16]u8 = undefined;
-        try writer.writeAll(self.background.printAsArg(&buf, .background) catch unreachable);
+        try writer.writeAll(self.bg.printAsArg(&buf, .background) catch unreachable);
     }
 
     if (self.thickness != .inherit) {
@@ -83,6 +117,54 @@ pub const Color = union(enum(u2)) {
         } };
     }
 
+    pub fn eql(self: Color, other: Color) bool {
+        if (std.meta.activeTag(self) != std.meta.activeTag(other)) {
+            return false;
+        }
+
+        return switch (self) {
+            .inherit => true,
+            .c8 => self.c8 == other.c8,
+            .b8 => self.b8 == other.b8,
+            .rgb8 => self.rgb8.eql(other.rgb8),
+        };
+    }
+
+    pub fn diff(self: Color, other: Color) Color {
+        if (other == .inherit) {
+            return .inherit;
+        }
+
+        if (std.meta.activeTag(self) != std.meta.activeTag(other)) {
+            return other;
+        }
+
+        switch (self) {
+            .inherit => unreachable,
+            .c8 => {
+                if (self.c8 == other.c8) {
+                    return .inherit;
+                } else {
+                    return other;
+                }
+            },
+            .b8 => {
+                if (self.b8 == other.b8) {
+                    return .inherit;
+                } else {
+                    return other;
+                }
+            },
+            .rgb8 => {
+                if (self.rgb8.eql(other.rgb8)) {
+                    return .inherit;
+                } else {
+                    return other;
+                }
+            },
+        }
+    }
+
     pub fn printAsArg(self: Color, buf: []u8, layer: Layer) BufPrintError![]u8 {
         return switch (self) {
             .inherit => &.{},
@@ -127,13 +209,17 @@ pub const Color = union(enum(u2)) {
         bright_white,
     };
 
-    pub const Rgb = struct {
+    pub const Rgb = packed struct(u24) {
         r: u8,
         g: u8,
         b: u8,
 
         pub fn init(r: u8, g: u8, b: u8) Rgb {
             return Rgb{ .r = r, .g = g, .b = b };
+        }
+
+        pub inline fn eql(self: Rgb, other: Rgb) {
+            return @as(u24, @bitCast(self)) == @as(u24, @bitCast(other));
         }
     };
 
@@ -225,6 +311,22 @@ pub const Attributes = packed struct(u12) {
         return @as(@typeInfo(Attributes).@"struct".backing_integer.?, @bitCast(self)) == 0;
     }
 
+    pub inline fn eql(self: Attributes, other: Attributes) bool {
+        return @as(u12, @bitCast(self)) == @as(u12, @bitCast(other));
+    }
+
+    pub fn diff(self: Attributes, other: Attributes) Attributes {
+        const result = Attributes{};
+
+        inline for (@typeInfo(Attributes).@"struct".fields) |field| {
+            if (@field(self, field.name) != @field(other, field.name)) {
+                @field(result, field.name) = @field(other.attrs, field.name);
+            }
+        }
+
+        return result;
+    }
+
     pub fn printAsArg(self: Attributes, buf: []u8) BufPrintError![]u8 {
         var i: usize = 0;
         var sep = ListSeparator.init(";");
@@ -312,10 +414,21 @@ pub const Underline = struct {
     pub const reset = CSI ++ "24m";
 
     color: Color = .inherit,
-    style: Style = .inherit,
+    style: UnderlineStyle = .inherit,
 
     pub inline fn isInherit(self: Underline) bool {
         return self.color == .inherit and self.style == .inherit;
+    }
+
+    pub inline fn eql(self: Underline, other: Underline) bool {
+        return self.style != other.style and self.color.eql(other.color);
+    }
+
+    pub inline fn diff(self: Underline, other: Underline) Underline {
+        return Underline{
+            .color = self.color.diff(other.color),
+            .style = if (self.style == other.style) UnderlineStyle.inherit else other.style,
+        };
     }
 
     pub fn printAsArg(self: Underline, buf: []u8) BufPrintError![]const u8 {
@@ -352,7 +465,7 @@ pub const Underline = struct {
         try writer.writeByte('m');
     }
 
-    pub const Style = enum {
+    pub const UnderlineStyle = enum {
         inherit,
         single,
         double,
@@ -360,7 +473,7 @@ pub const Underline = struct {
         dotted,
         dashed,
 
-        pub fn arg(self: Style) []const u8 {
+        pub fn arg(self: UnderlineStyle) []const u8 {
             return switch (self) {
                 .inherit => "",
                 .single => "4",
@@ -371,7 +484,7 @@ pub const Underline = struct {
             };
         }
 
-        pub fn print(self: Style, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+        pub fn print(self: UnderlineStyle, writer: *std.Io.Writer) std.Io.Writer.Error!void {
             if (self != .inherit) {
                 return;
             }
