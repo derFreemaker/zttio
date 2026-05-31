@@ -22,6 +22,14 @@ thickness: Thickness = .default,
 attrs: Attributes = .{},
 underline: Underline = .{},
 
+pub inline fn isInherit(self: *const Styling) bool {
+    return self.fg == .inherit and
+        self.bg == .inherit and
+        self.thickness == .inherit and
+        self.attrs.isInherit() and
+        self.underline.isInherit();
+}
+
 pub fn eql(self: *const Styling, other: *const Styling) bool {
     if (!self.fg.eql(other.fg)) {
         return false;
@@ -66,7 +74,11 @@ pub inline fn merge(self: *const Styling, other: *const Styling) Styling {
     };
 }
 
-pub fn print(self: *const Styling, writer: *std.Io.Writer) !void {
+pub fn print(self: *const Styling, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+    if (self.isInherit()) {
+        return;
+    }
+
     try writer.writeAll(CSI);
     var sep = ListSeparator.init(";");
 
@@ -354,7 +366,9 @@ pub const Attributes = packed struct(u12) {
             const self_field = &@field(self, field.name);
             const other_field = &@field(other, field.name);
 
-            if (self_field.* != other_field.*) {
+            if (self_field.* == other_field.*) {
+                result_field.* = .inherit;
+            } else {
                 result_field.* = other_field.*;
             }
         }
@@ -411,6 +425,10 @@ pub const Attributes = packed struct(u12) {
     }
 
     pub fn print(self: Attributes, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+        if (self.isInherit()) {
+            return;
+        }
+
         try writer.writeAll(CSI);
 
         var buf: [16]u8 = undefined;
@@ -518,6 +536,10 @@ pub const Underline = struct {
     }
 
     pub fn print(self: Underline, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+        if (self.isInherit()) {
+            return;
+        }
+
         try writer.writeAll(CSI);
 
         var buf: [32]u8 = undefined;
