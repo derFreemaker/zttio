@@ -359,6 +359,10 @@ pub const Attributes = packed struct(u12) {
     }
 
     pub fn diff(self: Attributes, other: Attributes) Attributes {
+        if (other.isInherit() or self.eql(other)) {
+            return .inherit;
+        }
+
         var result = Attributes{};
 
         inline for (@typeInfo(Attributes).@"struct".fields) |field| {
