@@ -14,7 +14,7 @@ thickness: Thickness = .inherit,
 attrs: Attributes = .{},
 underline: Underline = .{},
 
-pub fn eql(self: Styling, other: Styling) bool {
+pub fn eql(self: *const Styling, other: *const Styling) bool {
     if (!self.fg.eql(other.fg)) {
         return false;
     }
@@ -38,13 +38,23 @@ pub fn eql(self: Styling, other: Styling) bool {
     return true;
 }
 
-pub inline fn diff(self: Styling, other: Styling) Styling {
+pub inline fn diff(self: *const Styling, other: *const Styling) Styling {
     return Styling{
         .fg = self.fg.diff(other.fg),
         .bg = self.bg.diff(other.bg),
         .thickness = if (self.thickness == other.thickness) Thickness.inherit else other.thickness,
         .attrs = self.attrs.diff(other.attrs),
         .underline = self.underline.diff(other.underline),
+    };
+}
+
+pub inline fn merge(self: *const Styling, other: *const Styling) Styling {
+    return Styling{
+        .fg = self.fg.merge(other.fg),
+        .bg = self.bg.merge(other.bg),
+        .thickness = if (other.thickness == .inherit) self.thickness else other.thickness,
+        .attrs = self.attrs.merge(other.attrs),
+        .underline = self.underline.merge(other.underline),
     };
 }
 
@@ -163,6 +173,10 @@ pub const Color = union(enum(u2)) {
                 }
             },
         }
+    }
+
+    pub inline fn merge(self: Color, other: Color) Color {
+        return if (other == .inherit) self else other;
     }
 
     pub fn printAsArg(self: Color, buf: []u8, layer: Layer) BufPrintError![]u8 {
@@ -321,9 +335,27 @@ pub const Attributes = packed struct(u12) {
         var result = Attributes{};
 
         inline for (@typeInfo(Attributes).@"struct".fields) |field| {
-            if (@field(self, field.name) != @field(other, field.name)) {
-                @field(result, field.name) = @field(other, field.name);
+            const result_field = &@field(result, field.name);
+            const self_field = &@field(self, field.name);
+            const other_field = &@field(other, field.name);
+
+            if (self_field.* != other_field.*) {
+                result_field.* = other_field.*;
             }
+        }
+
+        return result;
+    }
+
+    pub fn merge(self: Attributes, other: Attributes) Attributes {
+        var result = Attributes{};
+
+        inline for (@typeInfo(Attributes).@"struct".fields) |field| {
+            const result_field = &@field(result, field.name);
+            const self_field = &@field(self, field.name);
+            const other_field = &@field(other, field.name);
+
+            result_field.* = if (other_field.* == .inherit) self_field.* else other_field.*;
         }
 
         return result;
@@ -433,6 +465,13 @@ pub const Underline = struct {
         };
     }
 
+    pub fn merge(self: Underline, other: Underline) Underline {
+        return Underline{
+            .color = self.color.merge(other.color),
+            .style = if (other.style == .inherit) self.style else other.style,
+        };
+    }
+
     pub fn printAsArg(self: Underline, buf: []u8) BufPrintError![]const u8 {
         var i: usize = 0;
 
@@ -497,3 +536,38 @@ pub const Underline = struct {
         }
     };
 };
+
+test "Styling: merge" {
+    const a = Styling{
+        .fg = .{ .c8 = .blue },
+        .attrs = .{
+            .italic = .unset,
+            .rapid_blink = .set,
+        },
+        .thickness = .dim,
+    };
+    const b = Styling{
+        .bg = .{ .c8 = .bright_cyan },
+        .attrs = .{
+            .italic = .set,
+            .reverse = .unset,
+        },
+        .thickness = .bold,
+        .underline = .{ .style = .dotted },
+    };
+    const actual = a.merge(&b);
+
+    const expected = Styling{
+        .fg = .{ .c8 = .blue },
+        .bg = .{ .c8 = .bright_cyan },
+        .thickness = .bold,
+        .attrs = .{
+            .italic = .set,
+            .rapid_blink = .set,
+            .reverse = .unset,
+        },
+        .underline = .{ .style = .dotted },
+    };
+
+    try std.testing.expectEqualDeep(expected, actual);
+}
