@@ -209,7 +209,7 @@ pub const Color = union(enum(u2)) {
         bright_white,
     };
 
-    pub const Rgb = packed struct(u24) {
+    pub const Rgb = struct {
         r: u8,
         g: u8,
         b: u8,
@@ -219,7 +219,9 @@ pub const Color = union(enum(u2)) {
         }
 
         pub inline fn eql(self: Rgb, other: Rgb) bool {
-            return @as(u24, @bitCast(self)) == @as(u24, @bitCast(other));
+            return self.r == other.r and
+                self.g == other.g and
+                self.b == other.b;
         }
     };
 
