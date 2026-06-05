@@ -81,9 +81,10 @@ indicates the setting of the mode. The Ps values are the same for the ANSI and D
 **Query:** APC - ``Gi=1,s=1,v=1,a=q,t=d,f=24;AAAA`` - ST
 
 **Supported Response:** APC - ``Gi=1;{error message or OK}`` - ST
+
 **Response indicating not supported:** APC - ``Gi=1;ENOTSUPPORTED:...`` - ST
 
 ## RGB
 **Query:** environment variable lookup ``COLORTERM``
 
-**Supported:** ``truecolor``; ``24bit``
+**Supported:** contains ``truecolor`` or/and ``24bit``

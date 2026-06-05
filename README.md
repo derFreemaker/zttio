@@ -30,7 +30,6 @@ from the terminal like key presses and mouse interactions.
 - [Kitty Image Protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol)
 
 ## Not Planned Features
-- Kitty Image Protocol using Shared Memory
 - [Sixel](https://en.wikipedia.org/wiki/Sixel)
 - [iTerm2 Image Protocol](https://iterm2.com/documentation-images.html)
 
