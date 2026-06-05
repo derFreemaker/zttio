@@ -12,6 +12,10 @@ pub const TerminalCapabilities = @import("terminal_capabilities.zig");
 pub const Tty = @import("tty.zig");
 pub const Winsize = @import("winsize.zig").Winsize;
 
+pub const Graphics = struct {
+    pub const Kitty = @import("graphics/kitty_graphics.zig");
+};
+
 pub const SigwinchHandling = if (builtin.is_test and builtin.os.tag != .windows) @import("sigwinch_handling.zig") else void;
 pub const Adapters = struct {
     pub const NativeAdapter = switch (builtin.os.tag) {

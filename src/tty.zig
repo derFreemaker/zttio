@@ -5,7 +5,6 @@ const Adapter = @import("adapter.zig");
 const ctlseqs = @import("ctlseqs.zig");
 const KittyGraphics = ctlseqs.KittyGraphics;
 const Event = @import("event.zig").Event;
-const GraphicsSource = @import("graphics/source.zig").Source;
 const gwidth = @import("gwidth.zig");
 const Parser = @import("parser.zig");
 const TerminalCapabilities = @import("terminal_capabilities.zig");
@@ -388,42 +387,42 @@ pub fn requestMultiCursorsColor(self: *Tty) HelperError!void {
     return self.writer.writeAll(ctlseqs.MultiCursor.QUERY_CURRENT_CURSORS_COLOR);
 }
 
-// const KittyHelperTransmitError = KittyGraphics.Error || HelperError;
+const KittyHelperTransmitError = KittyGraphics.Error || HelperError;
 
-// pub fn transmitImageKitty(self: *Tty, source: GraphicsSource, opts: KittyGraphics.TransmitOnlyOptions) KittyHelperTransmitError!void {
-//     if (!self.caps.kitty_graphics) return error.CapabilityNotSupported;
-//     return KittyGraphics.transmitOnly(self.writer, self.allocator, source, opts);
-// }
+pub fn transmitImageKitty(self: *Tty, bytes: []const u8, opts: KittyGraphics.TransmitOnlyOptions) KittyHelperTransmitError!void {
+    if (!self.caps.kitty_graphics) return error.CapabilityNotSupported;
+    return KittyGraphics.transmitOnly(self.writer, bytes, opts);
+}
 
-// pub fn transmitAndDisplayImageKitty(self: *Tty, source: GraphicsSource, opts: KittyGraphics.TransmitAndDisplayOptions) KittyHelperTransmitError!void {
-//     if (!self.caps.kitty_graphics) return error.CapabilityNotSupported;
-//     return KittyGraphics.transmitAndDisplay(self.writer, self.allocator, source, opts);
-// }
+pub fn transmitAndDisplayImageKitty(self: *Tty, bytes: []const u8, opts: KittyGraphics.TransmitAndDisplayOptions) KittyHelperTransmitError!void {
+    if (!self.caps.kitty_graphics) return error.CapabilityNotSupported;
+    return KittyGraphics.transmitAndDisplay(self.writer, bytes, opts);
+}
 
-// pub fn displayImageKitty(self: *Tty, opts: KittyGraphics.DisplayOnlyOptions) HelperError!void {
-//     if (!self.caps.kitty_graphics) return error.CapabilityNotSupported;
-//     return KittyGraphics.display(self.writer, opts);
-// }
+pub fn displayImageKitty(self: *Tty, opts: KittyGraphics.DisplayOnlyOptions) HelperError!void {
+    if (!self.caps.kitty_graphics) return error.CapabilityNotSupported;
+    return KittyGraphics.display(self.writer, opts);
+}
 
-// pub fn eraseImageKitty(self: *Tty, opts: KittyGraphics.EraseOptions) HelperError!void {
-//     if (!self.caps.kitty_graphics) return error.CapabilityNotSupported;
-//     return KittyGraphics.erase(self.writer, opts);
-// }
+pub fn eraseImageKitty(self: *Tty, opts: KittyGraphics.EraseOptions) HelperError!void {
+    if (!self.caps.kitty_graphics) return error.CapabilityNotSupported;
+    return KittyGraphics.erase(self.writer, opts);
+}
 
-// pub fn transmitAnimationFrameKitty(self: *Tty, opts: KittyGraphics.TransmitAnimationFrameOptions) KittyHelperTransmitError!void {
-//     if (!self.caps.kitty_graphics) return error.CapabilityNotSupported;
-//     return KittyGraphics.transmitAnimationFrame(self.writer, self.allocator, opts);
-// }
+pub fn transmitAnimationFrameKitty(self: *Tty, opts: KittyGraphics.TransmitAnimationFrameOptions) KittyHelperTransmitError!void {
+    if (!self.caps.kitty_graphics) return error.CapabilityNotSupported;
+    return KittyGraphics.transmitAnimationFrame(self.writer, opts);
+}
 
-// pub fn controlAnimationKitty(self: *Tty, opts: KittyGraphics.ControlAnimationOptions) HelperError!void {
-//     if (!self.caps.kitty_graphics) return error.CapabilityNotSupported;
-//     return KittyGraphics.controlAnimation(self.writer, opts);
-// }
+pub fn controlAnimationKitty(self: *Tty, opts: KittyGraphics.ControlAnimationOptions) HelperError!void {
+    if (!self.caps.kitty_graphics) return error.CapabilityNotSupported;
+    return KittyGraphics.controlAnimation(self.writer, opts);
+}
 
-// pub fn composeAnimationKitty(self: *Tty, opts: KittyGraphics.ComposeAnimationOptions) HelperError!void {
-//     if (!self.caps.kitty_graphics) return error.CapabilityNotSupported;
-//     return KittyGraphics.composeAnimation(self.writer, opts);
-// }
+pub fn composeAnimationKitty(self: *Tty, opts: KittyGraphics.ComposeAnimationOptions) HelperError!void {
+    if (!self.caps.kitty_graphics) return error.CapabilityNotSupported;
+    return KittyGraphics.composeAnimation(self.writer, opts);
+}
 
 pub const MoveCursor = union(enum) {
     home,

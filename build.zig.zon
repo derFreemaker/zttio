@@ -8,10 +8,6 @@
             .url = "git+https://github.com/jacobsandlund/uucode#2826a37a4562284fdacd8fa029d49509cc9bffcd",
             .hash = "uucode-0.2.0-ZZjBPlK5VADj7fdoq7G8LIHzD5o6FSkcBXXrRWr4jnrA",
         },
-        // .zigimg = .{
-        //     .url = "git+https://github.com/zigimg/zigimg.git#eab2522c023b9259db8b13f2f90d609b7437e5f6",
-        //     .hash = "zigimg-0.1.0-8_eo2vUZFgAAtN1c6dAO5DdqL0d4cEWHtn6iR5ucZJti",
-        // },
         .win32 = .{
             .url = "git+https://github.com/marlersoft/zigwin32#ab1c05ff1da857ec500c4da42e190032a8639717",
             .hash = "win32-25.0.28-preview-mX5pFQ8t5QNuXMsGluHTUtIed00-Mu4MEcV4wHxTJqpg",

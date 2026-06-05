@@ -3,9 +3,6 @@
 TTY interface with main focus on making it easy to get input
 from the terminal like key presses and mouse interactions.
 
-Inspired by the tty handling
-from [libvaxis](https://github.com/rockorager/libvaxis/tree/11f53c701ae6b5633582d957d57e1683de7b568a).
-
 ### [Project Overview](https://www.notion.so/2c97f91634e5800e8c9cfb75af5e8474?v=2c97f91634e581d7898f000c9df3a935&source=copy_link)
 
 ### [Supported Escape Sequences](escape_sequences.md)
@@ -44,4 +41,3 @@ I don't currently accept contributions.
 
 - [zigwin32](https://github.com/marlersoft/zigwin32)
 - [uucode](https://github.com/jacobsandlund/uucode)
-- [zigimg](https://github.com/zigimg/zigimg)
