@@ -1,12 +1,14 @@
 const std = @import("std");
+const testing = std.testing;
+
 const uucode = @import("uucode");
 
+const Adapter = @import("adapter.zig");
 const ctlseqs = @import("ctlseqs.zig");
 const KittyMultiCursorFlags = ctlseqs.Terminal.KittyMultiCursorFlags;
 const KittyKeyboardFlags = ctlseqs.Terminal.KittyKeyboardFlags;
 const gwidth = @import("gwidth.zig");
 const Key = @import("key.zig");
-const Adapter = @import("adapter.zig");
 
 const COLORTERM_ENV_VAR_NAME = "COLORTERM";
 
@@ -454,8 +456,6 @@ inline fn parseParam(comptime T: type, buf: []const u8, default: ?T) ?T {
     if (buf.len == 0) return default;
     return std.fmt.parseInt(T, buf, 10) catch return null;
 }
-
-const testing = std.testing;
 
 test "parse(csi): primary da" {
     var caps = TerminalCapabilities{};
