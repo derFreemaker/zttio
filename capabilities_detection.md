@@ -1,10 +1,5 @@
 # Supported Capabilities Detection
 
-We save the screen and cursor before detection and restore after,
-overwriting the saved screen and cursor state.
-
-Should be fine, since detection should be done before anything else.
-
 ## [DECRQM](https://vt100.net/docs/vt510-rm/DECRQM.html)
 **Response Format:** [DECRPM](https://vt100.net/docs/vt510-rm/DECRPM.html)
 - **Ansi:** CSI - ``{Pa};{Ps}$y``

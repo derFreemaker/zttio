@@ -35,20 +35,10 @@ pub fn query(io: std.Io, env_map: *const std.process.Environ.Map, adapter: Adapt
     const reader = adapter.getReader();
     const writer = adapter.getWriter();
 
-    try writer.writeAll(ctlseqs.Screen.save ++
-        ctlseqs.Cursor.save_position ++ "detecting terminal capabilities...");
-
     try writeQuery(writer);
     try writer.flush();
 
-    const caps = try parseQueryResponses(io, env_map, reader, timeout);
-
-    try writer.writeAll(ctlseqs.Cursor.restore_position ++
-        ctlseqs.Erase.line ++ // erase: "detecting terminal capabilities..."
-        ctlseqs.Screen.restore);
-    try writer.flush();
-
-    return caps;
+    return try parseQueryResponses(io, env_map, reader, timeout);
 }
 
 pub fn writeQuery(writer: *std.Io.Writer) error{WriteFailed}!void {
