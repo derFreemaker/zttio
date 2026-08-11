@@ -10,7 +10,6 @@ from the terminal like key presses and mouse interactions.
 ### [Supported Capabilities Detection](capabilities_detection.md)
 
 ## Features
-
 - RGB
 - [Hyperlinks](https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda) (OSC 8)
 - Bracketed Paste

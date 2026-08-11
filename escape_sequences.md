@@ -1,6 +1,9 @@
 # Supported Escape Sequences
+Escape sequences send by the terminal to the running program over `stdin`.
 
+> [!note]
 > Undocumented escape sequences with the same introducer (e.g. ``ESC [``) are ignored.
+
 ## SS2
 **Introducer:** ``ESC N``
 
