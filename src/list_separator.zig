@@ -11,17 +11,15 @@ pub fn init(sep: []const u8) ListSeparator {
     };
 }
 
-pub fn get(self: *ListSeparator) ?[]const u8 {
-    if (self.first) {
+pub inline fn get(self: *ListSeparator) []const u8 {
+    return if (self.first) {
         self.first = false;
-        return null;
-    }
-
-    return self.sep;
+        return &.{};
+    } else self.sep;
 }
 
 pub fn writeToBuf(self: *ListSeparator, buf: []u8) error{NoSpaceLeft}!usize {
-    const sep = self.get() orelse return 0;
+    const sep = self.get();
     if (buf.len < sep.len) {
         return error.NoSpaceLeft;
     }
@@ -31,17 +29,16 @@ pub fn writeToBuf(self: *ListSeparator, buf: []u8) error{NoSpaceLeft}!usize {
 }
 
 pub fn print(self: *ListSeparator, writer: *std.Io.Writer) std.Io.Writer.Error!void {
-    const sep = self.get() orelse return;
-    return writer.writeAll(sep);
+    return writer.writeAll(self.get());
 }
 
 test get {
     var sep = ListSeparator.init("asd");
 
-    try std.testing.expectEqual(null, sep.get());
-    try std.testing.expectEqualStrings("asd", sep.get().?);
-    try std.testing.expectEqualStrings("asd", sep.get().?);
-    try std.testing.expectEqualStrings("asd", sep.get().?);
+    try std.testing.expectEqualStrings("", sep.get());
+    try std.testing.expectEqualStrings("asd", sep.get());
+    try std.testing.expectEqualStrings("asd", sep.get());
+    try std.testing.expectEqualStrings("asd", sep.get());
 }
 
 test writeToBuf {
