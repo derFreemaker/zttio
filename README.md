@@ -24,19 +24,15 @@ from the terminal like key presses and mouse interactions.
 - Color Mode Updates (Mode 2031)
 - [In-Band Resize Events](https://gist.github.com/rockorager/e695fb2924d36b2bcf1fff4a3704bd83) (Mode 2048)
 - Synchronized Output (Mode 2026)
-- [Scaled Text](https://sw.kovidgoyal.net/kitty/text-sizing-protocol) (OSC 66)
-- [Explicit Width](https://sw.kovidgoyal.net/kitty/text-sizing-protocol) (OSC 66)
-- [Kitty Multi Cursor](https://sw.kovidgoyal.net/kitty/multiple-cursors-protocol)
-- [Kitty Image Protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol)
+- [Scaled Text](https://sw.kovidgoyal.net/kitty/text-sizing-protocol) (OSC 66) (untested)
+- [Explicit Width](https://sw.kovidgoyal.net/kitty/text-sizing-protocol) (OSC 66) (untested)
+- [Kitty Multi Cursor](https://sw.kovidgoyal.net/kitty/multiple-cursors-protocol) (untested)
+- [Kitty Image Protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol) (untested)
 
 ## Not Planned Features
 - [Sixel](https://en.wikipedia.org/wiki/Sixel)
 - [iTerm2 Image Protocol](https://iterm2.com/documentation-images.html)
 
-## Contributions
-I don't currently accept contributions.
-
 ## Dependencies
-
-- [zigwin32](https://github.com/marlersoft/zigwin32)
+- [zigwin32](https://github.com/marlersoft/zigwin32) (windows only)
 - [uucode](https://github.com/jacobsandlund/uucode)
