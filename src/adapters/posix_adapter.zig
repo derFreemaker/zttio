@@ -23,7 +23,7 @@ termios: ?posix.termios = null,
 
 winsize_pending: std.atomic.Value(PackedWinsize) = .init(.empty),
 
-pub fn init(io: std.Io, stdin: std.Io.File, stdin_buf: []u8, stdout: std.Io.File, stdout_buf: []u8) error{ OutOfMemory, NoTty }!PosixAdapter {
+pub fn init(io: std.Io, stdin: std.Io.File, stdin_buf: []u8, stdout: std.Io.File, stdout_buf: []u8) error{NoTty}!PosixAdapter {
     if (!(stdout.isTty(io) catch false)) return error.NoTty;
 
     return PosixAdapter{

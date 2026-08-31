@@ -35,7 +35,7 @@ last_mouse_button_press: u16 = 0,
 
 org_state: ?ConsoleMode = null,
 
-pub fn init(io: std.Io, stdin: std.Io.File, stdin_buf: []u8, stdout: std.Io.File, stdout_buf: []u8) error{ OutOfMemory, NoTty }!WinAdapter {
+pub fn init(io: std.Io, stdin: std.Io.File, stdin_buf: []u8, stdout: std.Io.File, stdout_buf: []u8) error{NoTty}!WinAdapter {
     if (!(stdin.isTty(io) catch false)) return error.NoTty;
 
     return WinAdapter{
