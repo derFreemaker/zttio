@@ -2,10 +2,10 @@ const std = @import("std");
 const posix = std.posix;
 const builtin = @import("builtin");
 
-const SigwinchHandling = @import("../sigwinch_handling.zig");
-const Winsize = @import("../winsize.zig").Winsize;
 const Adapter = @import("../adapter.zig");
 const ReadResult = Adapter.ReadResult;
+const SigwinchHandling = @import("../sigwinch_handling.zig");
+const Winsize = @import("../winsize.zig").Winsize;
 
 const log = std.log.scoped(.zttio_posix_adapter);
 
@@ -23,14 +23,8 @@ termios: ?posix.termios = null,
 
 winsize_pending: std.atomic.Value(PackedWinsize) = .init(.empty),
 
-pub fn init(allocator: std.mem.Allocator, io: std.Io, stdin: std.Io.File, stdout: std.Io.File) error{ OutOfMemory, NoTty }!PosixAdapter {
+pub fn init(io: std.Io, stdin: std.Io.File, stdin_buf: []u8, stdout: std.Io.File, stdout_buf: []u8) error{ OutOfMemory, NoTty }!PosixAdapter {
     if (!(stdout.isTty(io) catch false)) return error.NoTty;
-
-    const stdin_buf = try allocator.alloc(u8, 1024);
-    errdefer allocator.free(stdin_buf);
-
-    const stdout_buf = try allocator.alloc(u8, 16 * 1024);
-    errdefer allocator.free(stdout_buf);
 
     return PosixAdapter{
         .stdin = stdin.handle,
@@ -41,11 +35,6 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, stdin: std.Io.File, stdout
         .stdout_buf = stdout_buf,
         .stdout_writer = stdout.writer(io, stdout_buf),
     };
-}
-
-pub fn deinit(self: *PosixAdapter, allocator: std.mem.Allocator) void {
-    allocator.free(self.stdin_buf);
-    allocator.free(self.stdout_buf);
 }
 
 pub fn adapter(self: *PosixAdapter) Adapter {

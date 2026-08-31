@@ -1,13 +1,14 @@
 const std = @import("std");
-const win32 = @import("win32");
 const windows = std.os.windows;
+
+const win32 = @import("win32");
 const winconsole = win32.system.console;
 
+const Adapter = @import("../adapter.zig");
+const ReadResult = Adapter.ReadResult;
 const Key = @import("../key.zig");
 const Mouse = @import("../mouse.zig");
 const Winsize = @import("../winsize.zig").Winsize;
-const Adapter = @import("../adapter.zig");
-const ReadResult = Adapter.ReadResult;
 
 const log = std.log.scoped(.zttio_win_adapter);
 
@@ -34,14 +35,8 @@ last_mouse_button_press: u16 = 0,
 
 org_state: ?ConsoleMode = null,
 
-pub fn init(allocator: std.mem.Allocator, io: std.Io, stdin: std.Io.File, stdout: std.Io.File) error{ OutOfMemory, NoTty }!WinAdapter {
+pub fn init(io: std.Io, stdin: std.Io.File, stdin_buf: []u8, stdout: std.Io.File, stdout_buf: []u8) error{ OutOfMemory, NoTty }!WinAdapter {
     if (!(stdin.isTty(io) catch false)) return error.NoTty;
-
-    const stdin_buf = try allocator.alloc(u8, 1024);
-    errdefer allocator.free(stdin_buf);
-
-    const stdout_buf = try allocator.alloc(u8, 16 * 1024);
-    errdefer allocator.free(stdout_buf);
 
     return WinAdapter{
         .stdin = stdin.handle,
@@ -52,11 +47,6 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, stdin: std.Io.File, stdout
         .stdout_buf = stdout_buf,
         .stdout_writer = stdout.writer(io, stdout_buf),
     };
-}
-
-pub fn deinit(self: *WinAdapter, allocator: std.mem.Allocator) void {
-    allocator.free(self.stdin_buf);
-    allocator.free(self.stdout_buf);
 }
 
 pub fn adapter(self: *WinAdapter) Adapter {
