@@ -364,8 +364,8 @@ pub const Text = struct {
 const std = @import("std");
 const assert = std.debug.assert;
 
-pub const KittyGraphics = @import("graphics/kitty_graphics.zig");
+pub const KittyGraphics = @import("tty/graphics/kitty_graphics.zig");
 const Key = @import("key.zig");
 const ListSeparator = @import("list_separator.zig");
-pub const MultiCursor = @import("multi_cursor.zig");
+pub const MultiCursor = @import("tty/multi_cursor.zig");
 pub const Styling = @import("styling.zig");

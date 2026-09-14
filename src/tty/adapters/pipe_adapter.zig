@@ -1,7 +1,7 @@
 const std = @import("std");
 
 const Adapter = @import("../adapter.zig");
-const Winsize = @import("../winsize.zig");
+const Winsize = @import("../../winsize.zig").Winsize;
 
 const PipeAdapter = @This();
 
@@ -49,12 +49,12 @@ fn read(self_ptr: *anyopaque) Adapter.ReadError!?Adapter.ReadResult {
         else => return Adapter.ReadError.ReadFailed,
     };
 
-    const n = std.unicode.utf8ByteSequenceLength(buf[0]) catch Adapter.ReadError.ReadFailed;
+    const n = std.unicode.utf8ByteSequenceLength(buf[0]) catch return Adapter.ReadError.ReadFailed;
     if (n > 1) {
-        self.reader.readSliceAll(buf[1..n]) catch Adapter.ReadError.ReadFailed;
+        self.reader.readSliceAll(buf[1..n]) catch return Adapter.ReadError.ReadFailed;
     }
 
-    const codepoint = std.unicode.utf8Decode(buf[0..n]) catch Adapter.ReadError.ReadFailed;
+    const codepoint = std.unicode.utf8Decode(buf[0..n]) catch return Adapter.ReadError.ReadFailed;
     return Adapter.ReadResult{
         .codepoint = codepoint,
     };

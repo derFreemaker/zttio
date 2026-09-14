@@ -2,13 +2,13 @@ const std = @import("std");
 const builtin = @import("builtin");
 
 const Adapter = @import("adapter.zig");
-const ctlseqs = @import("ctlseqs.zig");
+const ctlseqs = @import("../ctlseqs.zig");
 const KittyGraphics = ctlseqs.KittyGraphics;
 const Event = @import("event.zig").Event;
-const gwidth = @import("gwidth.zig");
+const gwidth = @import("../gwidth.zig");
 const Parser = @import("parser.zig");
 const TerminalCapabilities = @import("terminal_capabilities.zig");
-const Winsize = @import("winsize.zig").Winsize;
+const Winsize = @import("../winsize.zig").Winsize;
 
 const log = std.log.scoped(.zttio_tty);
 

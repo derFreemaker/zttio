@@ -26,12 +26,12 @@ const std = @import("std");
 const uucode = @import("uucode");
 
 const Adapter = @import("adapter.zig");
-const Color = @import("color.zig").Color;
+const Color = @import("../color.zig").Color;
 const Event = @import("event.zig").Event;
-const Key = @import("key.zig");
-const Mouse = @import("mouse.zig");
-const Winsize = @import("winsize.zig").Winsize;
-const ctlseqs = @import("ctlseqs.zig");
+const Key = @import("../key.zig");
+const Mouse = @import("../mouse.zig");
+const Winsize = @import("../winsize.zig").Winsize;
+const ctlseqs = @import("../ctlseqs.zig");
 const MultiCursor = ctlseqs.MultiCursor;
 const KittyGraphics = ctlseqs.KittyGraphics;
 
