@@ -5,7 +5,7 @@ const builtin = @import("builtin");
 const Adapter = @import("../adapter.zig");
 const ReadResult = Adapter.ReadResult;
 const SigwinchHandling = @import("../sigwinch_handling.zig");
-const Winsize = @import("../winsize.zig").Winsize;
+const Winsize = @import("../../winsize.zig").Winsize;
 
 const log = std.log.scoped(.zttio_posix_adapter);
 

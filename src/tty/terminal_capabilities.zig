@@ -4,11 +4,11 @@ const testing = std.testing;
 const uucode = @import("uucode");
 
 const Adapter = @import("adapter.zig");
-const ctlseqs = @import("ctlseqs.zig");
+const ctlseqs = @import("../ctlseqs.zig");
 const KittyMultiCursorFlags = ctlseqs.Terminal.KittyMultiCursorFlags;
 const KittyKeyboardFlags = ctlseqs.Terminal.KittyKeyboardFlags;
-const gwidth = @import("gwidth.zig");
-const Key = @import("key.zig");
+const gwidth = @import("../gwidth.zig");
+const Key = @import("../key.zig");
 
 const COLORTERM_ENV_VAR_NAME = "COLORTERM";
 

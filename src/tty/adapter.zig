@@ -1,7 +1,7 @@
 const std = @import("std");
 
 const Event = @import("event.zig").Event;
-const Winsize = @import("winsize.zig").Winsize;
+const Winsize = @import("../winsize.zig").Winsize;
 
 const Adapter = @This();
 

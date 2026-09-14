@@ -6,9 +6,9 @@ const winconsole = win32.system.console;
 
 const Adapter = @import("../adapter.zig");
 const ReadResult = Adapter.ReadResult;
-const Key = @import("../key.zig");
-const Mouse = @import("../mouse.zig");
-const Winsize = @import("../winsize.zig").Winsize;
+const Key = @import("../../key.zig");
+const Mouse = @import("../../mouse.zig");
+const Winsize = @import("../../winsize.zig").Winsize;
 
 const log = std.log.scoped(.zttio_win_adapter);
 

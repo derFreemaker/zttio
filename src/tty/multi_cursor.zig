@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const ctlseqs = @import("ctlseqs.zig");
+const ctlseqs = @import("../ctlseqs.zig");
 
 pub const INTRODUCER = ctlseqs.CSI ++ ">";
 pub const TRAILER = " q";
