@@ -27,10 +27,12 @@ pub fn main(init: std.process.Init) !u8 {
     const event_allocator = allocator;
 
     const stdin: std.Io.File = .stdin();
-    const stdout: std.Io.File = .stdout();
+    var stdin_buf: [1024]u8 = undefined;
 
-    var native_adapter = try zttio.Adapters.NativeAdapter.init(allocator, init.io, stdin, stdout);
-    defer native_adapter.deinit(allocator);
+    const stdout: std.Io.File = .stdout();
+    var stdout_buf: [1024]u8 = undefined;
+
+    var native_adapter = try zttio.Adapters.NativeAdapter.init(init.io, stdin, &stdin_buf, stdout, &stdout_buf);
     if (comptime builtin.os.tag != .windows) try zttio.SigwinchHandling.notifyWinsize(native_adapter.getSigWinchHook());
     defer if (comptime builtin.os.tag != .windows) zttio.SigwinchHandling.removeNotifyWinsize(&native_adapter);
 
@@ -70,7 +72,7 @@ pub fn main(init: std.process.Init) !u8 {
                     pos_row = @max(5, pos_row - 1);
 
                     try tty.setStyling(&zttio.Styling{
-                        .background = .{ .c8 = .blue },
+                        .bg = .{ .c8 = .blue },
                     });
 
                     try tty.clearLine(.entire);
@@ -81,7 +83,7 @@ pub fn main(init: std.process.Init) !u8 {
                     pos_row = @min(20, pos_row + 1);
 
                     try tty.setStyling(&zttio.Styling{
-                        .background = .{ .c8 = .magenta },
+                        .bg = .{ .c8 = .magenta },
                     });
 
                     try tty.clearLine(.entire);
