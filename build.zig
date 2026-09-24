@@ -37,19 +37,26 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_zttio_tests.step);
 
+    if (target.result.os.tag == .windows) {
+        // TODO: port to dependency when extracting into own library
+        const ntdll_mods = @import("src_ntdll/ntdll_build.zig").build(b, test_step, target, optimize);
+        zttio_mod.addImport("ntdll", ntdll_mods[1]);
+    }
+
     const example_exe = b.addExecutable(.{
         .name = "example",
         .root_module = b.createModule(.{
             .target = target,
             .optimize = optimize,
 
-            .root_source_file = b.path("examples/basic.zig"),
+            .root_source_file = b.path("examples/example.zig"),
 
             .imports = &.{
                 .{ .name = "zttio", .module = zttio_mod },
             },
         }),
     });
+    b.installArtifact(example_exe);
     const example_run_step = b.step("run-example", "run example");
     const example_cmd = b.addRunArtifact(example_exe);
     example_run_step.dependOn(&example_cmd.step);

@@ -1,6 +1,7 @@
 const std = @import("std");
 const windows = std.os.windows;
 
+const ntdll = @import("ntdll");
 const win32 = @import("win32");
 const winconsole = win32.system.console;
 
@@ -71,16 +72,14 @@ pub fn adapter(self: *WinAdapter) Adapter {
 fn getWinsize(self_ptr: *anyopaque) Adapter.GetWinsizeError!Winsize {
     const self: *WinAdapter = @ptrCast(@alignCast(self_ptr));
 
-    var console_info: winconsole.CONSOLE_SCREEN_BUFFER_INFO = undefined;
-    if (winconsole.GetConsoleScreenBufferInfo(self.stdout, &console_info) == 0) {
-        windows.unexpectedError(windows.GetLastError()) catch {};
+    var screen_buffer_info: ntdll.Console.ScreenBufferInfo = undefined;
+    ntdll.Console.GetScreenBufferInfo(self.stdout, &screen_buffer_info) catch {
         return Adapter.GetWinsizeError.Failed;
-    }
+    };
 
-    const window = console_info.srWindow;
     return Winsize{
-        .cols = @intCast(window.Right - window.Left + 1),
-        .rows = @intCast(window.Bottom - window.Top + 1),
+        .cols = @intCast(screen_buffer_info.Size.X),
+        .rows = @intCast(screen_buffer_info.Size.Y),
         .x_pixel = 0,
         .y_pixel = 0,
     };
@@ -447,18 +446,18 @@ fn enable(self_ptr: *anyopaque) Adapter.EnableError!bool {
     };
 
     const input_raw_mode: WIN_CONSOLE_MODE_INPUT = .{
-        .WINDOW_INPUT = 1, // resize events
-        .MOUSE_INPUT = 1,
-        .EXTENDED_FLAGS = 1, // allow mouse events
-        .PROCESSED_INPUT = 0,
-        .LINE_INPUT = 0,
-        .ECHO_INPUT = 0,
-        .VIRTUAL_TERMINAL_INPUT = 1,
+        .WINDOW_INPUT = true, // resize events
+        .MOUSE_INPUT = true,
+        .EXTENDED_FLAGS = true, // allow mouse events
+        .PROCESSED_INPUT = false,
+        .LINE_INPUT = false,
+        .ECHO_INPUT = false,
+        .VIRTUAL_TERMINAL_INPUT = true,
     };
 
     const output_raw_mode: WIN_CONSOLE_MODE_OUTPUT = .{
-        .PROCESSED_OUTPUT = 1,
-        .VIRTUAL_TERMINAL_PROCESSING = 1,
+        .PROCESSED_OUTPUT = true,
+        .VIRTUAL_TERMINAL_PROCESSING = true,
     };
 
     setConsoleMode(self.stdin, input_raw_mode) catch return Adapter.EnableError.Failed;
@@ -484,37 +483,36 @@ fn disable(self_ptr: *anyopaque) void {
 
 fn isEnabled(self_ptr: *anyopaque) bool {
     const self: *WinAdapter = @ptrCast(@alignCast(self_ptr));
-
     return self.org_state != null;
 }
 
 /// see: https://learn.microsoft.com/en-us/windows/console/getconsolemode
-const WIN_CONSOLE_MODE_INPUT = packed struct(u32) {
-    PROCESSED_INPUT: u1 = 0,
-    LINE_INPUT: u1 = 0,
-    ECHO_INPUT: u1 = 0,
-    WINDOW_INPUT: u1 = 0,
-    MOUSE_INPUT: u1 = 0,
-    INSERT_MODE: u1 = 0,
-    QUICK_EDIT_MODE: u1 = 0,
-    EXTENDED_FLAGS: u1 = 0,
-    AUTO_POSITION: u1 = 0,
-    VIRTUAL_TERMINAL_INPUT: u1 = 0,
+const WIN_CONSOLE_MODE_INPUT = packed struct(std.os.windows.DWORD) {
+    PROCESSED_INPUT: bool = false,
+    LINE_INPUT: bool = false,
+    ECHO_INPUT: bool = false,
+    WINDOW_INPUT: bool = false,
+    MOUSE_INPUT: bool = false,
+    INSERT_MODE: bool = false,
+    QUICK_EDIT_MODE: bool = false,
+    EXTENDED_FLAGS: bool = false,
+    AUTO_POSITION: bool = false,
+    VIRTUAL_TERMINAL_INPUT: bool = false,
     _: u22 = 0,
 };
 
 /// see: https://learn.microsoft.com/en-us/windows/console/getconsolemode
-const WIN_CONSOLE_MODE_OUTPUT = packed struct(u32) {
-    PROCESSED_OUTPUT: u1 = 0,
-    WRAP_AT_EOL_OUTPUT: u1 = 0,
-    VIRTUAL_TERMINAL_PROCESSING: u1 = 0,
-    DISABLE_NEWLINE_AUTO_RETURN: u1 = 0,
-    ENABLE_LVB_GRID_WORLDWIDE: u1 = 0,
+const WIN_CONSOLE_MODE_OUTPUT = packed struct(std.os.windows.DWORD) {
+    PROCESSED_OUTPUT: bool = false,
+    WRAP_AT_EOL_OUTPUT: bool = false,
+    VIRTUAL_TERMINAL_PROCESSING: bool = false,
+    DISABLE_NEWLINE_AUTO_RETURN: bool = false,
+    ENABLE_LVB_GRID_WORLDWIDE: bool = false,
     _: u27 = 0,
 };
 
 fn getConsoleMode(comptime T: type, handle: std.os.windows.HANDLE) !T {
-    var mode: u32 = undefined;
+    var mode: std.os.windows.DWORD = undefined;
     if (winconsole.GetConsoleMode(handle, @ptrCast(&mode)) == 0) return switch (windows.GetLastError()) {
         .INVALID_HANDLE => error.InvalidHandle,
         else => |e| windows.unexpectedError(e),

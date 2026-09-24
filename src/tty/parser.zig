@@ -91,7 +91,7 @@ pub fn nextEvent(self: *Parser, should_quit: ?*const bool) ParseError!?Event {
                 return try self.parseBuf(.no_remaining) orelse continue;
             }
 
-            self.adapter.waitForData(20);
+            self.adapter.waitForData(20 * 100);
             continue;
         };
 

@@ -27,6 +27,8 @@ pub const Adapters = struct {
 };
 
 test {
+    _ = @import("pipe/windows_pipe.zig");
+
     _ = @import("tty/terminal_capabilities.zig");
     _ = @import("tty/parser.zig");
 
