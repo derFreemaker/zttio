@@ -2024,38 +2024,23 @@ pub const CON_DRV = struct {
         Size: ULONG,
         Buffer: P(VOID),
 
-        pub fn fromPtr(self: *IO_BUFFER, buffer_ptr: anytype) void {
+        pub fn from(self: *IO_BUFFER, buffer_ptr: anytype) void {
             if (@typeInfo(@TypeOf(buffer_ptr)) != .pointer) {
-                @compileError("expected a pointer");
+                @compileError("expected a pointer or a slice, got: " ++ @typeName(@TypeOf(buffer_ptr)));
             }
             const info = @typeInfo(@TypeOf(buffer_ptr)).pointer;
 
-            self.Size = @sizeOf(info.child);
-            self.Buffer = buffer_ptr;
-        }
-
-        pub fn fromSlice(self: *IO_BUFFER, slice: anytype) void {
-            if (@typeInfo(@TypeOf(slice)) != .pointer) {
-                @compileError("expected a slice");
+            switch (info.size) {
+                .one => {
+                    self.Size = @sizeOf(info.child);
+                    self.Buffer = buffer_ptr;
+                },
+                .slice => {
+                    self.Size = @sizeOf(info.child) * buffer_ptr.len;
+                    self.Buffer = buffer_ptr;
+                },
+                else => @compileError("expected a pointer or a slice, got: " ++ @typeName(@TypeOf(buffer_ptr))),
             }
-            const info = @typeInfo(@TypeOf(slice)).pointer;
-            comptime std.debug.assert(info.size == .slice);
-
-            self.Size = @sizeOf(info.child) * slice.len;
-            self.Buffer = slice.ptr;
-        }
-
-        pub fn fromArr(self: *IO_BUFFER, arr: anytype) void {
-            if (@typeInfo(@TypeOf(arr)) != .pointer) {
-                @compileError("expected a pointer to an array");
-            }
-            const ptr_info = @typeInfo(@TypeOf(arr)).pointer;
-            comptime std.debug.assert(ptr_info.size == .one);
-
-            const info = @typeInfo(ptr_info.child).array;
-
-            self.Size = @sizeOf(info.child) * info.len;
-            self.Buffer = arr;
         }
     };
 

@@ -86,8 +86,8 @@ fn getWinsize(self_ptr: *anyopaque) Adapter.GetWinsizeError!Winsize {
     const screen_buffer_info = &screen_buffer_info_msg.Body;
     {
         var user_io: ntdll.raw.CON_DRV.USER_DEFINED_IO(1, 1) = .{};
-        user_io.Buffers[0].fromPtr(&screen_buffer_info_msg);
-        user_io.Buffers[1].fromPtr(screen_buffer_info);
+        user_io.Buffers[0].from(&screen_buffer_info_msg);
+        user_io.Buffers[1].from(screen_buffer_info);
 
         var iosb: ntdll.raw.IO_STATUS_BLOCK = undefined;
         switch (ntdll.raw.NtDeviceIoControlFile(
@@ -455,9 +455,9 @@ fn readNextEvents(self: *WinAdapter) ntdll.UnexpectedError!bool {
     } };
     {
         var user_io: ntdll.raw.CON_DRV.USER_DEFINED_IO(1, 2) = .{};
-        user_io.Buffers[0].fromPtr(&read_console_input_msg);
-        user_io.Buffers[1].fromPtr(&read_console_input_msg.Body);
-        user_io.Buffers[2].fromArr(&self.events);
+        user_io.Buffers[0].from(&read_console_input_msg);
+        user_io.Buffers[1].from(&read_console_input_msg.Body);
+        user_io.Buffers[2].from(&self.events);
 
         var iosb: ntdll.raw.IO_STATUS_BLOCK = undefined;
         switch (ntdll.raw.NtDeviceIoControlFile(
@@ -569,8 +569,8 @@ fn getConsoleCP(handle: ntdll.HANDLE) error{Unexpected}!ntdll.raw.CONSOLE.CODEPA
 
     {
         var user_io: ntdll.raw.CON_DRV.USER_DEFINED_IO(1, 1) = .{};
-        user_io.Buffers[0].fromPtr(&get_console_cp);
-        user_io.Buffers[1].fromPtr(&get_console_cp.Body);
+        user_io.Buffers[0].from(&get_console_cp);
+        user_io.Buffers[1].from(&get_console_cp.Body);
 
         var iosb: ntdll.raw.IO_STATUS_BLOCK = undefined;
         switch (ntdll.raw.NtDeviceIoControlFile(
@@ -603,7 +603,7 @@ fn setConsoleCP(handle: ntdll.HANDLE, codepage: ntdll.raw.CONSOLE.CODEPAGE) erro
 
     {
         var user_io: ntdll.raw.CON_DRV.USER_DEFINED_IO(1, 0) = .{};
-        user_io.Buffers[0].fromPtr(&set_console_output_cp);
+        user_io.Buffers[0].from(&set_console_output_cp);
 
         var iosb: ntdll.raw.IO_STATUS_BLOCK = undefined;
         switch (ntdll.raw.NtDeviceIoControlFile(
@@ -630,8 +630,8 @@ fn getConsoleMode(handle: ntdll.HANDLE) error{ InvalidHandle, Unexpected }!ntdll
     var get_console_mode_msg: ntdll.raw.CONSOLE.GetModeMsg = .{};
     {
         var user_io: ntdll.raw.CON_DRV.USER_DEFINED_IO(1, 1) = .{};
-        user_io.Buffers[0].fromPtr(&get_console_mode_msg);
-        user_io.Buffers[1].fromPtr(&get_console_mode_msg.Body);
+        user_io.Buffers[0].from(&get_console_mode_msg);
+        user_io.Buffers[1].from(&get_console_mode_msg.Body);
 
         var iosb: ntdll.raw.IO_STATUS_BLOCK = undefined;
         switch (ntdll.raw.NtDeviceIoControlFile(
@@ -663,8 +663,8 @@ fn setConsoleMode(handle: ntdll.HANDLE, mode: ntdll.raw.CONSOLE.MODE) error{ Inv
     } };
     {
         var user_io: ntdll.raw.CON_DRV.USER_DEFINED_IO(1, 1) = .{};
-        user_io.Buffers[0].fromPtr(&set_console_mode_msg);
-        user_io.Buffers[1].fromPtr(&set_console_mode_msg.Body);
+        user_io.Buffers[0].from(&set_console_mode_msg);
+        user_io.Buffers[1].from(&set_console_mode_msg.Body);
 
         var iosb: ntdll.raw.IO_STATUS_BLOCK = undefined;
         switch (ntdll.raw.NtDeviceIoControlFile(
