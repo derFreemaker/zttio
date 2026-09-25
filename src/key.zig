@@ -189,8 +189,9 @@ pub const KeyText = union(enum) {
         if (text.len == 1) {
             return KeyText{ .char = text[0] };
         } else if (text.len <= MaxShortLength) {
-            var key_text = KeyText{ .short = std.mem.zeroes([MaxShortLength]u8) };
+            var key_text = KeyText{ .short = undefined };
             @memcpy(key_text.short[0..text.len], text);
+            @memset(key_text.short[text.len..], 0);
             return key_text;
         } else {
             return KeyText{ .long = text };

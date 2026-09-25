@@ -2,8 +2,6 @@ const std = @import("std");
 const windows = std.os.windows;
 
 const ntdll = @import("ntdll");
-const win32 = @import("win32");
-const winconsole = win32.system.console;
 
 const Adapter = @import("../adapter.zig");
 const ReadResult = Adapter.ReadResult;
@@ -25,14 +23,14 @@ stdout: windows.HANDLE,
 stdout_buf: []u8,
 stdout_writer: std.Io.File.Writer,
 
-events: [INPUT_RECORD_BUF_LEN]winconsole.INPUT_RECORD = undefined,
+events: [INPUT_RECORD_BUF_LEN]ntdll.raw.CONSOLE.INPUT_RECORD = undefined,
 events_count: usize = 0,
 events_pos: usize = 0,
 
 utf16_buf: [2]u16 = undefined,
 utf16_half: bool = false,
 
-last_mouse_button_press: u16 = 0,
+last_mouse_button_press: ntdll.raw.CONSOLE.INPUT_RECORD.MOUSE_EVENT.BUTTON_STATE = .{},
 
 org_state: ?ConsoleMode = null,
 
@@ -69,13 +67,46 @@ pub fn adapter(self: *WinAdapter) Adapter {
     };
 }
 
+fn getReader(self_ptr: *anyopaque) *std.Io.Reader {
+    const self: *WinAdapter = @ptrCast(@alignCast(self_ptr));
+
+    return &self.stdin_reader.interface;
+}
+
+fn getWriter(self_ptr: *anyopaque) *std.Io.Writer {
+    const self: *WinAdapter = @ptrCast(@alignCast(self_ptr));
+
+    return &self.stdout_writer.interface;
+}
+
 fn getWinsize(self_ptr: *anyopaque) Adapter.GetWinsizeError!Winsize {
     const self: *WinAdapter = @ptrCast(@alignCast(self_ptr));
 
-    var screen_buffer_info: ntdll.Console.ScreenBufferInfo = undefined;
-    ntdll.Console.GetScreenBufferInfo(self.stdout, &screen_buffer_info) catch {
-        return Adapter.GetWinsizeError.Failed;
-    };
+    var screen_buffer_info_msg: ntdll.raw.CONSOLE.GetScreenBufferInfoMsg = .{};
+    const screen_buffer_info = &screen_buffer_info_msg.Body;
+    {
+        var user_io: ntdll.raw.CON_DRV.USER_DEFINED_IO(1, 1) = .{};
+        user_io.Buffers[0].fromPtr(&screen_buffer_info_msg);
+        user_io.Buffers[1].fromPtr(screen_buffer_info);
+
+        var iosb: ntdll.raw.IO_STATUS_BLOCK = undefined;
+        switch (ntdll.raw.NtDeviceIoControlFile(
+            self.stdout,
+            null,
+            null,
+            null,
+            &iosb,
+            .CONDRV_ISSUE_USER_IO,
+            &user_io,
+            @sizeOf(@TypeOf(user_io)),
+            null,
+            0,
+        )) {
+            .SUCCESS => {},
+            else => |status| ntdll.unexpectedStatus(status) catch
+                return Adapter.GetWinsizeError.Failed,
+        }
+    }
 
     return Winsize{
         .cols = @intCast(screen_buffer_info.Size.X),
@@ -93,12 +124,12 @@ fn read(self_ptr: *anyopaque) Adapter.ReadError!?ReadResult {
         self.tossEvent();
 
         switch (record.EventType) {
-            winconsole.KEY_EVENT => {
-                const event = record.Event.KeyEvent;
+            .KEY => {
+                const event = record.Event.Key;
 
-                if (self.utf16_half and std.unicode.utf16IsLowSurrogate(event.uChar.UnicodeChar)) {
+                if (self.utf16_half and std.unicode.utf16IsLowSurrogate(event.uChar.Unicode)) {
                     self.utf16_half = false;
-                    self.utf16_buf[1] = event.uChar.UnicodeChar;
+                    self.utf16_buf[1] = event.uChar.Unicode;
                     const cp: u21 = std.unicode.utf16DecodeSurrogatePair(&self.utf16_buf) catch unreachable;
 
                     return ReadResult{ .codepoint = cp };
@@ -106,17 +137,17 @@ fn read(self_ptr: *anyopaque) Adapter.ReadError!?ReadResult {
 
                 const base_layout: u16 = switch (event.wVirtualKeyCode) {
                     0x00 => { // delivered when we get an escape sequence or a unicode codepoint
-                        if (std.unicode.utf16IsHighSurrogate(event.uChar.UnicodeChar)) {
-                            self.utf16_buf[0] = event.uChar.UnicodeChar;
+                        if (std.unicode.utf16IsHighSurrogate(event.uChar.Unicode)) {
+                            self.utf16_buf[0] = event.uChar.Unicode;
                             self.utf16_half = true;
                             continue;
                         }
 
-                        if (std.unicode.utf16IsLowSurrogate(event.uChar.UnicodeChar)) {
+                        if (std.unicode.utf16IsLowSurrogate(event.uChar.Unicode)) {
                             continue;
                         }
 
-                        return ReadResult{ .codepoint = event.uChar.UnicodeChar };
+                        return ReadResult{ .codepoint = event.uChar.Unicode };
                     },
                     0x08 => Key.backspace,
                     0x09 => Key.tab,
@@ -232,7 +263,7 @@ fn read(self_ptr: *anyopaque) Adapter.ReadError!?ReadResult {
 
                 var codepoint: u21 = base_layout;
                 var len: u3 = 0;
-                switch (event.uChar.UnicodeChar) {
+                switch (event.uChar.Unicode) {
                     0x00...0x1F => {},
                     else => |cp| {
                         codepoint = cp;
@@ -247,72 +278,93 @@ fn read(self_ptr: *anyopaque) Adapter.ReadError!?ReadResult {
                     .text = .from(text[0..len]),
                 };
 
-                switch (event.bKeyDown) {
-                    0 => return ReadResult{ .event = .{ .key_release = key } },
-                    else => return ReadResult{ .event = .{ .key_press = key } },
+                if (event.bKeyDown.toBool()) {
+                    return ReadResult{ .event = .{ .key_press = key } };
+                } else {
+                    return ReadResult{ .event = .{ .key_release = key } };
                 }
             },
-            winconsole.MOUSE_EVENT => {
-                // see https://learn.microsoft.com/en-us/windows/console/mouse-event-record-str
-                const event = record.Event.MouseEvent;
+            .MOUSE => {
+                const event = record.Event.Mouse;
 
-                // High word of dwButtonState represents mouse wheel.
-                // Positive is wheel_up, negative is wheel_down
-                // Low word represents button state
-                const mouse_wheel_direction: i16 = blk: {
-                    const wheelu32: u32 = event.dwButtonState >> 16;
-                    const wheelu16: u16 = @truncate(wheelu32);
-                    break :blk @bitCast(wheelu16);
-                };
-
-                const buttons: u16 = @truncate(event.dwButtonState);
                 // save the current state when we are done
-                defer self.last_mouse_button_press = buttons;
-                const button_xor = self.last_mouse_button_press ^ buttons;
+                defer self.last_mouse_button_press = event.dwButtonState;
 
+                // see https://learn.microsoft.com/en-us/windows/console/mouse-event-record-str
+                const button_xor: ntdll.raw.CONSOLE.INPUT_RECORD.MOUSE_EVENT.BUTTON_STATE =
+                    @bitCast(@as(ntdll.raw.DWORD, @bitCast(self.last_mouse_button_press)) ^
+                        @as(ntdll.raw.DWORD, @bitCast(event.dwButtonState)));
                 var event_type: Mouse.Action = .press;
-                const btn: Mouse.Button = switch (button_xor) {
+
+                const btn: Mouse.Button = switch (@as(u16, @truncate(@as(ntdll.raw.DWORD, @bitCast(button_xor))))) {
                     0x0000 => blk: {
-                        // Check wheel event
-                        if (event.dwEventFlags & 0x0004 > 0) {
-                            if (mouse_wheel_direction > 0)
-                                break :blk .wheel_up
-                            else
-                                break :blk .wheel_down;
+                        if (event.dwEventFlags.WHEELED) {
+                            switch (event.dwButtonState.getWheelDirection()) {
+                                .FORWARD => break :blk .wheel_up,
+                                .BACKWARD => break :blk .wheel_down,
+                            }
                         }
 
                         // If we have no change but one of the buttons is still pressed we have a
                         // drag event. Find out which button is held down
-                        if (buttons > 0 and event.dwEventFlags & 0x0001 > 0) {
+                        if (@as(ntdll.raw.DWORD, @bitCast(event.dwButtonState)) > 0 and event.dwEventFlags.MOVED) {
                             event_type = .drag;
-                            if (buttons & 0x0001 > 0) break :blk .left;
-                            if (buttons & 0x0002 > 0) break :blk .right;
-                            if (buttons & 0x0004 > 0) break :blk .middle;
-                            if (buttons & 0x0008 > 0) break :blk .button_8;
-                            if (buttons & 0x0010 > 0) break :blk .button_9;
+                            if (event.dwButtonState.FROM_LEFT_1ST_BUTTON_PRESSED) {
+                                break :blk .left;
+                            }
+                            if (event.dwButtonState.RIGHTMOST_BUTTON_PRESSED) {
+                                break :blk .right;
+                            }
+                            if (event.dwButtonState.FROM_LEFT_2ND_BUTTON_PRESSED) {
+                                break :blk .middle;
+                            }
+                            if (event.dwButtonState.FROM_LEFT_3RD_BUTTON_PRESSED) {
+                                break :blk .button_8;
+                            }
+                            if (event.dwButtonState.FROM_LEFT_4TH_BUTTON_PRESSED) {
+                                break :blk .button_9;
+                            }
                         }
 
-                        if (event.dwEventFlags & 0x0001 > 0) event_type = .motion;
+                        if (event.dwEventFlags.MOVED) {
+                            event_type = .motion;
+                        }
+
                         break :blk .none;
                     },
                     0x0001 => blk: {
-                        if (buttons & 0x0001 == 0) event_type = .release;
+                        if (event.dwButtonState.FROM_LEFT_1ST_BUTTON_PRESSED) {
+                            event_type = .release;
+                        }
+
                         break :blk .left;
                     },
                     0x0002 => blk: {
-                        if (buttons & 0x0002 == 0) event_type = .release;
+                        if (event.dwButtonState.RIGHTMOST_BUTTON_PRESSED) {
+                            event_type = .release;
+                        }
+
                         break :blk .right;
                     },
                     0x0004 => blk: {
-                        if (buttons & 0x0004 == 0) event_type = .release;
+                        if (event.dwButtonState.FROM_LEFT_2ND_BUTTON_PRESSED) {
+                            event_type = .release;
+                        }
+
                         break :blk .middle;
                     },
                     0x0008 => blk: {
-                        if (buttons & 0x0008 == 0) event_type = .release;
+                        if (event.dwButtonState.FROM_LEFT_3RD_BUTTON_PRESSED) {
+                            event_type = .release;
+                        }
+
                         break :blk .button_8;
                     },
                     0x0010 => blk: {
-                        if (buttons & 0x0010 == 0) event_type = .release;
+                        if (event.dwButtonState.FROM_LEFT_4TH_BUTTON_PRESSED) {
+                            event_type = .release;
+                        }
+
                         break :blk .button_9;
                     },
                     else => {
@@ -321,13 +373,10 @@ fn read(self_ptr: *anyopaque) Adapter.ReadError!?ReadResult {
                     },
                 };
 
-                const shift: u32 = 0x0010;
-                const alt: u32 = 0x0001 | 0x0002;
-                const ctrl: u32 = 0x0004 | 0x0008;
                 const mods: Mouse.Modifiers = .{
-                    .shift = event.dwControlKeyState & shift > 0,
-                    .alt = event.dwControlKeyState & alt > 0,
-                    .ctrl = event.dwControlKeyState & ctrl > 0,
+                    .shift = event.dwControlKeyState.SHIFT_PRESSED,
+                    .alt = event.dwControlKeyState.LEFT_ALT_PRESSED or event.dwControlKeyState.RIGHT_ALT_PRESSED,
+                    .ctrl = event.dwControlKeyState.LEFT_CTRL_PRESSED or event.dwControlKeyState.RIGHT_CTRL_PRESSED,
                 };
 
                 const mouse: Mouse = .{
@@ -339,19 +388,21 @@ fn read(self_ptr: *anyopaque) Adapter.ReadError!?ReadResult {
                 };
                 return ReadResult{ .event = .{ .mouse = mouse } };
             },
-            winconsole.WINDOW_BUFFER_SIZE_EVENT => {
+            .WINDOW_BUFFER_SIZE => {
                 // NOTE: Even though the event comes with a size, it may not be accurate.
                 // We ask for the size directly when we get this event
+                const winsize = getWinsize(self) catch return error.ReadFailed;
+                return ReadResult{ .event = .{ .winsize = winsize } };
+            },
+            .FOCUS => {
                 return ReadResult{
-                    .event = .{ .winsize = getWinsize(self) catch return error.ReadFailed },
+                    .event = if (record.Event.Focus.bSetFocus.toBool())
+                        .focus_in
+                    else
+                        .focus_out,
                 };
             },
-            winconsole.FOCUS_EVENT => {
-                switch (record.Event.FocusEvent.bSetFocus) {
-                    0 => return ReadResult{ .event = .focus_out },
-                    else => return ReadResult{ .event = .focus_in },
-                }
-            },
+            .MENU => continue,
             else => {
                 log.warn("unknown input EventType: {}", .{record.EventType});
                 continue;
@@ -360,17 +411,17 @@ fn read(self_ptr: *anyopaque) Adapter.ReadError!?ReadResult {
     }
 }
 
-inline fn translateMods(mods: u32) Key.Modifiers {
+inline fn translateMods(mods: ntdll.raw.CONSOLE.CONTROL_KEY_STATE) Key.Modifiers {
     return .{
-        .shift = mods & winconsole.SHIFT_PRESSED > 0,
-        .alt = mods & (winconsole.LEFT_ALT_PRESSED | winconsole.RIGHT_ALT_PRESSED) > 0,
-        .ctrl = mods & (winconsole.LEFT_CTRL_PRESSED | winconsole.RIGHT_CTRL_PRESSED) > 0,
-        .caps_lock = mods & winconsole.CAPSLOCK_ON > 0,
-        .num_lock = mods & winconsole.NUMLOCK_ON > 0,
+        .shift = mods.SHIFT_PRESSED,
+        .alt = mods.LEFT_ALT_PRESSED or mods.RIGHT_ALT_PRESSED,
+        .ctrl = mods.LEFT_CTRL_PRESSED or mods.RIGHT_CTRL_PRESSED,
+        .caps_lock = mods.CAPSLOCK_ON,
+        .num_lock = mods.NUMLOCK_ON,
     };
 }
 
-fn peekEvent(self: *WinAdapter) error{ReadFailed}!?winconsole.INPUT_RECORD {
+fn peekEvent(self: *WinAdapter) error{ReadFailed}!?ntdll.raw.CONSOLE.INPUT_RECORD {
     if (self.events_pos >= self.events_count) {
         if (!(self.readNextEvents() catch |err| switch (err) {
             error.Unexpected => return error.ReadFailed,
@@ -391,25 +442,46 @@ inline fn remainingEvents(self: *const WinAdapter) usize {
     return self.events_count - self.events_pos;
 }
 
-fn readNextEvents(self: *WinAdapter) error{Unexpected}!bool {
+fn readNextEvents(self: *WinAdapter) ntdll.UnexpectedError!bool {
     self.events_count = 0;
     self.events_pos = 0;
 
-    var numEvents: u32 = 0;
-    if (winconsole.GetNumberOfConsoleInputEvents(self.stdin, &numEvents) == 0) {
-        return windows.unexpectedError(windows.GetLastError());
-    }
-    if (numEvents == 0) {
-        return false;
-    }
-    const events_to_read = @min(numEvents, INPUT_RECORD_BUF_LEN);
+    var read_console_input_msg: ntdll.raw.CONSOLE.GetConsoleInputMsg = .{ .Body = .{
+        .NumRecords = 0,
+        .Flags = .{
+            .READ_NOWAIT = true,
+        },
+        .Unicode = .FALSE,
+    } };
+    {
+        var user_io: ntdll.raw.CON_DRV.USER_DEFINED_IO(1, 2) = .{};
+        user_io.Buffers[0].fromPtr(&read_console_input_msg);
+        user_io.Buffers[1].fromPtr(&read_console_input_msg.Body);
+        user_io.Buffers[2].fromArr(&self.events);
 
-    if (winconsole.ReadConsoleInputW(self.stdin, &self.events, events_to_read, &numEvents) == 0) {
-        return windows.unexpectedError(windows.GetLastError());
+        var iosb: ntdll.raw.IO_STATUS_BLOCK = undefined;
+        switch (ntdll.raw.NtDeviceIoControlFile(
+            self.stdin,
+            null,
+            null,
+            null,
+            &iosb,
+            .CONDRV_ISSUE_USER_IO,
+            &user_io,
+            @sizeOf(@TypeOf(user_io)),
+            null,
+            0,
+        )) {
+            .SUCCESS => {},
+            else => |status| {
+                const foo = status;
+                return ntdll.unexpectedStatus(foo);
+            },
+        }
     }
-    self.events_count = numEvents;
+    self.events_count = read_console_input_msg.Body.NumRecords;
 
-    return true;
+    return self.events_count != 0;
 }
 
 fn waitForStdinData(self_ptr: *anyopaque, milliseconds: u16) void {
@@ -420,24 +492,27 @@ fn waitForStdinData(self_ptr: *anyopaque, milliseconds: u16) void {
     const self: *WinAdapter = @ptrCast(@alignCast(self_ptr));
 
     const timeout: i64 = -@as(i64, milliseconds) * 10_000;
-    _ = windows.ntdll.NtWaitForSingleObject(self.stdin, .FALSE, &timeout);
+    _ = ntdll.raw.NtWaitForSingleObject(self.stdin, .FALSE, &timeout);
 }
 
 const ConsoleMode = struct {
-    pub const utf8_codepage: c_uint = 65001;
+    // pub const utf8_codepage: ntdll.raw.CONSOLE.CODEPAGE = 65001;
 
-    codepage: c_uint,
-    input_mode: WIN_CONSOLE_MODE_INPUT,
-    output_mode: WIN_CONSOLE_MODE_OUTPUT,
+    codepage: ntdll.raw.CONSOLE.CODEPAGE,
+    input_mode: ntdll.raw.CONSOLE.MODE.INPUT,
+    output_mode: ntdll.raw.CONSOLE.MODE.OUTPUT,
 };
 
 fn enable(self_ptr: *anyopaque) Adapter.EnableError!bool {
     const self: *WinAdapter = @ptrCast(@alignCast(self_ptr));
     if (self.org_state != null) return false;
 
-    const org_codepage = winconsole.GetConsoleOutputCP();
-    const org_input_mode = getConsoleMode(WIN_CONSOLE_MODE_INPUT, self.stdin) catch return Adapter.EnableError.Failed;
-    const org_output_mode = getConsoleMode(WIN_CONSOLE_MODE_OUTPUT, self.stdout) catch return Adapter.EnableError.Failed;
+    const org_codepage = getConsoleCP(self.stdin) catch
+        return Adapter.EnableError.Failed;
+    const org_input_mode = (getConsoleMode(self.stdin) catch
+        return Adapter.EnableError.Failed).Input;
+    const org_output_mode = (getConsoleMode(self.stdout) catch
+        return Adapter.EnableError.Failed).Output;
 
     const org_state = ConsoleMode{
         .codepage = org_codepage,
@@ -445,27 +520,27 @@ fn enable(self_ptr: *anyopaque) Adapter.EnableError!bool {
         .output_mode = org_output_mode,
     };
 
-    const input_raw_mode: WIN_CONSOLE_MODE_INPUT = .{
-        .WINDOW_INPUT = true, // resize events
-        .MOUSE_INPUT = true,
-        .EXTENDED_FLAGS = true, // allow mouse events
-        .PROCESSED_INPUT = false,
-        .LINE_INPUT = false,
-        .ECHO_INPUT = false,
-        .VIRTUAL_TERMINAL_INPUT = true,
+    const input_raw_mode: ntdll.raw.CONSOLE.MODE.INPUT = .{
+        .ENABLE_WINDOW_INPUT = true, // resize events
+        .ENABLE_MOUSE_INPUT = true,
+        .ENABLE_EXTENDED_FLAGS = true, // allow mouse events
+        .ENABLE_PROCESSED_INPUT = false,
+        .ENABLE_LINE_INPUT = false,
+        .ENABLE_ECHO_INPUT = false,
+        .ENABLE_VIRTUAL_TERMINAL_INPUT = true,
     };
 
-    const output_raw_mode: WIN_CONSOLE_MODE_OUTPUT = .{
-        .PROCESSED_OUTPUT = true,
-        .VIRTUAL_TERMINAL_PROCESSING = true,
+    const output_raw_mode: ntdll.raw.CONSOLE.MODE.OUTPUT = .{
+        .ENABLE_PROCESSED_OUTPUT = true,
+        .ENABLE_VIRTUAL_TERMINAL_PROCESSING = true,
     };
 
-    setConsoleMode(self.stdin, input_raw_mode) catch return Adapter.EnableError.Failed;
-    setConsoleMode(self.stdout, output_raw_mode) catch return Adapter.EnableError.Failed;
-    if (winconsole.SetConsoleOutputCP(ConsoleMode.utf8_codepage) == 0) {
-        windows.unexpectedError(windows.GetLastError()) catch {};
+    setConsoleMode(self.stdin, .{ .Input = input_raw_mode }) catch
         return Adapter.EnableError.Failed;
-    }
+    setConsoleMode(self.stdout, .{ .Output = output_raw_mode }) catch
+        return Adapter.EnableError.Failed;
+    setConsoleCP(self.stdin, .@"utf-8") catch
+        return Adapter.EnableError.Failed;
 
     self.org_state = org_state;
     return true;
@@ -476,9 +551,9 @@ fn disable(self_ptr: *anyopaque) void {
     const org_state = self.org_state orelse return;
     defer self.org_state = null;
 
-    _ = winconsole.SetConsoleOutputCP(org_state.codepage);
-    setConsoleMode(self.stdin, org_state.input_mode) catch {};
-    setConsoleMode(self.stdout, org_state.output_mode) catch {};
+    setConsoleCP(self.stdin, org_state.codepage) catch {};
+    setConsoleMode(self.stdin, .{ .Input = org_state.input_mode }) catch {};
+    setConsoleMode(self.stdout, .{ .Output = org_state.output_mode }) catch {};
 }
 
 fn isEnabled(self_ptr: *anyopaque) bool {
@@ -486,55 +561,129 @@ fn isEnabled(self_ptr: *anyopaque) bool {
     return self.org_state != null;
 }
 
-/// see: https://learn.microsoft.com/en-us/windows/console/getconsolemode
-const WIN_CONSOLE_MODE_INPUT = packed struct(std.os.windows.DWORD) {
-    PROCESSED_INPUT: bool = false,
-    LINE_INPUT: bool = false,
-    ECHO_INPUT: bool = false,
-    WINDOW_INPUT: bool = false,
-    MOUSE_INPUT: bool = false,
-    INSERT_MODE: bool = false,
-    QUICK_EDIT_MODE: bool = false,
-    EXTENDED_FLAGS: bool = false,
-    AUTO_POSITION: bool = false,
-    VIRTUAL_TERMINAL_INPUT: bool = false,
-    _: u22 = 0,
-};
+fn getConsoleCP(handle: ntdll.HANDLE) error{Unexpected}!ntdll.raw.CONSOLE.CODEPAGE {
+    var get_console_cp: ntdll.raw.CONSOLE.GetCPMsg = .{ .Body = .{
+        .CodePage = undefined,
+        .Output = .FALSE,
+    } };
 
-/// see: https://learn.microsoft.com/en-us/windows/console/getconsolemode
-const WIN_CONSOLE_MODE_OUTPUT = packed struct(std.os.windows.DWORD) {
-    PROCESSED_OUTPUT: bool = false,
-    WRAP_AT_EOL_OUTPUT: bool = false,
-    VIRTUAL_TERMINAL_PROCESSING: bool = false,
-    DISABLE_NEWLINE_AUTO_RETURN: bool = false,
-    ENABLE_LVB_GRID_WORLDWIDE: bool = false,
-    _: u27 = 0,
-};
+    {
+        var user_io: ntdll.raw.CON_DRV.USER_DEFINED_IO(1, 1) = .{};
+        user_io.Buffers[0].fromPtr(&get_console_cp);
+        user_io.Buffers[1].fromPtr(&get_console_cp.Body);
 
-fn getConsoleMode(comptime T: type, handle: std.os.windows.HANDLE) !T {
-    var mode: std.os.windows.DWORD = undefined;
-    if (winconsole.GetConsoleMode(handle, @ptrCast(&mode)) == 0) return switch (windows.GetLastError()) {
-        .INVALID_HANDLE => error.InvalidHandle,
-        else => |e| windows.unexpectedError(e),
-    };
-    return @bitCast(mode);
+        var iosb: ntdll.raw.IO_STATUS_BLOCK = undefined;
+        switch (ntdll.raw.NtDeviceIoControlFile(
+            handle,
+            null,
+            null,
+            null,
+            &iosb,
+            .CONDRV_ISSUE_USER_IO,
+            &user_io,
+            @sizeOf(@TypeOf(user_io)),
+            null,
+            0,
+        )) {
+            .SUCCESS => {},
+            else => |status| {
+                return ntdll.unexpectedStatus(status);
+            },
+        }
+    }
+
+    return get_console_cp.Body.CodePage;
 }
 
-fn setConsoleMode(handle: std.os.windows.HANDLE, mode: anytype) !void {
-    if (winconsole.SetConsoleMode(handle, @bitCast(mode)) == 0) return switch (windows.GetLastError()) {
-        .INVALID_HANDLE => error.InvalidHandle,
-        else => |e| windows.unexpectedError(e),
-    };
+fn setConsoleCP(handle: ntdll.HANDLE, codepage: ntdll.raw.CONSOLE.CODEPAGE) error{Unexpected}!void {
+    var set_console_output_cp: ntdll.raw.CONSOLE.SetCPMsg = .{ .Body = .{
+        .CodePage = codepage,
+        .Output = .FALSE,
+    } };
+
+    {
+        var user_io: ntdll.raw.CON_DRV.USER_DEFINED_IO(1, 0) = .{};
+        user_io.Buffers[0].fromPtr(&set_console_output_cp);
+
+        var iosb: ntdll.raw.IO_STATUS_BLOCK = undefined;
+        switch (ntdll.raw.NtDeviceIoControlFile(
+            handle,
+            null,
+            null,
+            null,
+            &iosb,
+            .CONDRV_ISSUE_USER_IO,
+            &user_io,
+            @sizeOf(@TypeOf(user_io)),
+            null,
+            0,
+        )) {
+            .SUCCESS => {},
+            else => |status| {
+                return ntdll.unexpectedStatus(status);
+            },
+        }
+    }
 }
 
-fn getReader(self_ptr: *anyopaque) *std.Io.Reader {
-    const self: *WinAdapter = @ptrCast(@alignCast(self_ptr));
+fn getConsoleMode(handle: ntdll.HANDLE) error{ InvalidHandle, Unexpected }!ntdll.raw.CONSOLE.MODE {
+    var get_console_mode_msg: ntdll.raw.CONSOLE.GetModeMsg = .{};
+    {
+        var user_io: ntdll.raw.CON_DRV.USER_DEFINED_IO(1, 1) = .{};
+        user_io.Buffers[0].fromPtr(&get_console_mode_msg);
+        user_io.Buffers[1].fromPtr(&get_console_mode_msg.Body);
 
-    return &self.stdin_reader.interface;
+        var iosb: ntdll.raw.IO_STATUS_BLOCK = undefined;
+        switch (ntdll.raw.NtDeviceIoControlFile(
+            handle,
+            null,
+            null,
+            null,
+            &iosb,
+            .CONDRV_ISSUE_USER_IO,
+            &user_io,
+            @sizeOf(@TypeOf(user_io)),
+            null,
+            0,
+        )) {
+            .SUCCESS => {},
+            .INVALID_HANDLE => return error.InvalidHandle,
+            else => |status| {
+                return ntdll.unexpectedStatus(status);
+            },
+        }
+    }
+
+    return get_console_mode_msg.Body.Mode;
 }
 
-fn getWriter(self_ptr: *anyopaque) *std.Io.Writer {
-    const self: *WinAdapter = @ptrCast(@alignCast(self_ptr));
+fn setConsoleMode(handle: ntdll.HANDLE, mode: ntdll.raw.CONSOLE.MODE) error{ InvalidHandle, Unexpected }!void {
+    var set_console_mode_msg: ntdll.raw.CONSOLE.SetModeMsg = .{ .Body = .{
+        .Mode = mode,
+    } };
+    {
+        var user_io: ntdll.raw.CON_DRV.USER_DEFINED_IO(1, 1) = .{};
+        user_io.Buffers[0].fromPtr(&set_console_mode_msg);
+        user_io.Buffers[1].fromPtr(&set_console_mode_msg.Body);
 
-    return &self.stdout_writer.interface;
+        var iosb: ntdll.raw.IO_STATUS_BLOCK = undefined;
+        switch (ntdll.raw.NtDeviceIoControlFile(
+            handle,
+            null,
+            null,
+            null,
+            &iosb,
+            .CONDRV_ISSUE_USER_IO,
+            &user_io,
+            @sizeOf(@TypeOf(user_io)),
+            null,
+            0,
+        )) {
+            .SUCCESS => {},
+            .INVALID_HANDLE => return error.InvalidHandle,
+            else => |status| {
+                return ntdll.unexpectedStatus(status);
+            },
+        }
+    }
 }

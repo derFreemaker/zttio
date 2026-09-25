@@ -21,13 +21,6 @@ pub fn build(b: *std.Build) void {
             .{ .name = "uucode", .module = uucode_mod },
         },
     });
-    if (target.result.os.tag == .windows) {
-        if (b.lazyDependency("win32", .{})) |win32| {
-            const mod = win32.module("win32");
-
-            zttio_mod.addImport("win32", mod);
-        }
-    }
 
     const zttio_tests = b.addTest(.{
         .root_module = zttio_mod,
@@ -38,7 +31,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_zttio_tests.step);
 
     if (target.result.os.tag == .windows) {
-        // TODO: port to dependency when extracting into own library
+        // @TODO: port to dependency when extracting into own library
         const ntdll_mods = @import("src_ntdll/ntdll_build.zig").build(b, test_step, target, optimize);
         zttio_mod.addImport("ntdll", ntdll_mods[1]);
     }

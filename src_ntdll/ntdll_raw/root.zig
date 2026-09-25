@@ -41,12 +41,12 @@ fn ANYSIZE_ARRAY(comptime T: type) type {
 
 pub const VOID = anyopaque;
 
-// pub const BOOL = Bool(INT);
+pub const BOOL = Bool(INT);
 pub const BOOLEAN = Bool(BYTE);
 
 pub const BYTE = u8;
 pub const INT = c_int;
-// pub const UINT = c_uint;
+pub const UINT = c_uint;
 // pub const UINT8 = u8;
 // pub const UINT16 = u16;
 // pub const UINT32 = u32;
@@ -2024,7 +2024,7 @@ pub const CON_DRV = struct {
         Size: ULONG,
         Buffer: P(VOID),
 
-        pub fn is(self: *IO_BUFFER, buffer_ptr: anytype) void {
+        pub fn fromPtr(self: *IO_BUFFER, buffer_ptr: anytype) void {
             if (@typeInfo(@TypeOf(buffer_ptr)) != .pointer) {
                 @compileError("expected a pointer");
             }
@@ -2033,6 +2033,30 @@ pub const CON_DRV = struct {
             self.Size = @sizeOf(info.child);
             self.Buffer = buffer_ptr;
         }
+
+        pub fn fromSlice(self: *IO_BUFFER, slice: anytype) void {
+            if (@typeInfo(@TypeOf(slice)) != .pointer) {
+                @compileError("expected a slice");
+            }
+            const info = @typeInfo(@TypeOf(slice)).pointer;
+            comptime std.debug.assert(info.size == .slice);
+
+            self.Size = @sizeOf(info.child) * slice.len;
+            self.Buffer = slice.ptr;
+        }
+
+        pub fn fromArr(self: *IO_BUFFER, arr: anytype) void {
+            if (@typeInfo(@TypeOf(arr)) != .pointer) {
+                @compileError("expected a pointer to an array");
+            }
+            const ptr_info = @typeInfo(@TypeOf(arr)).pointer;
+            comptime std.debug.assert(ptr_info.size == .one);
+
+            const info = @typeInfo(ptr_info.child).array;
+
+            self.Size = @sizeOf(info.child) * info.len;
+            self.Buffer = arr;
+        }
     };
 
     /// - ref: https://github.com/microsoft/terminal/dep/Console/condrv.h
@@ -2040,13 +2064,15 @@ pub const CON_DRV = struct {
         return extern struct {
             Client: ?HANDLE = null,
             InputCount: ULONG = InputCount,
-            OutputCount: ULONG = InputCount,
+            OutputCount: ULONG = OutputCount,
             Buffers: [InputCount + OutputCount]IO_BUFFER = undefined,
         };
     }
 };
 
 pub const CONSOLE = struct {
+    pub const CODEPAGE = @import("codepage.zig").CODEPAGE;
+
     /// - ref: shared/ntdef.h
     pub const HCURSOR = HANDLE;
 
@@ -2058,10 +2084,10 @@ pub const CONSOLE = struct {
 
     /// - ref: um/consoleapi.h
     pub const MODE = extern union {
-        Input: INPUT_MODE,
-        Output: OUTPUT_MODE,
+        Input: INPUT,
+        Output: OUTPUT,
 
-        pub const INPUT_MODE = packed struct(ULONG) {
+        pub const INPUT = packed struct(ULONG) {
             ENABLE_PROCESSED_INPUT: bool = false,
             ENABLE_LINE_INPUT: bool = false,
             ENABLE_ECHO_INPUT: bool = false,
@@ -2069,19 +2095,19 @@ pub const CONSOLE = struct {
             ENABLE_MOUSE_INPUT: bool = false,
             ENABLE_INSERT_MODE: bool = false,
             ENABLE_QUICK_EDIT_MODE: bool = false,
-            ENABLE_EXTENDED_FALGS: bool = false,
+            ENABLE_EXTENDED_FLAGS: bool = false,
             ENABLE_AUTO_POSITION: bool = false,
             ENABLE_VIRTUAL_TERMINAL_INPUT: bool = false,
-            Unused10: u22,
+            Unused10: u22 = 0,
         };
 
-        pub const OUTPUT_MODE = packed struct(ULONG) {
+        pub const OUTPUT = packed struct(ULONG) {
             ENABLE_PROCESSED_OUTPUT: bool = false,
             ENABLE_WRAP_AT_EOL_OUTPUT: bool = false,
             ENABLE_VIRTUAL_TERMINAL_PROCESSING: bool = false,
             DISABLE_NEWLINE_AUTO_RETURN: bool = false,
             ENABLE_LVB_GRID_WORLDWIDE: bool = false,
-            Unused5: u27,
+            Unused5: u27 = 0,
         };
     };
 
@@ -2099,6 +2125,144 @@ pub const CONSOLE = struct {
         FULLSCREEN_MODE: bool = false,
         WINDOWED_MODE: bool = false,
         Unused2: u30 = 0,
+    };
+
+    /// - ref: um/wincontypes.h
+    pub const CONTROL_KEY_STATE = packed struct(ULONG) {
+        RIGHT_ALT_PRESSED: bool = false,
+        LEFT_ALT_PRESSED: bool = false,
+        RIGHT_CTRL_PRESSED: bool = false,
+        LEFT_CTRL_PRESSED: bool = false,
+        SHIFT_PRESSED: bool = false,
+        NUMLOCK_ON: bool = false,
+        SCROLLLOCK_ON: bool = false,
+        CAPSLOCK_ON: bool = false,
+        ENHANCED_KEY: bool = false,
+        Unused9: u7 = 0,
+        /// DBCS for JPN: SBCS/DBCS mode.
+        NLS_DBCSCHAR: bool = false,
+        // NOTE(freemaker): here this one is listed NLS_APLHANUMERIC with 0x00000000 ('DBCS for JPN: Alphanumeric mode.')
+        /// DBCS for JPN: Katakana mode.
+        NLS_KATAKANA: bool = false,
+        /// DBCS for JPN: Hiragana mode.
+        NLS_HIRAGANA: bool = false,
+        Unused19: u3 = 0,
+        /// DBCS for JPN: Roman/Noroman mode.
+        NLS_ROMAN: bool = false,
+        /// DBCS for JPN: IME conversion.
+        NLS_IME_CONVERSION: bool = false,
+        Unused24: u2 = 0,
+        /// AltNumpad OEM char (copied from ntuser\inc\kbd.h) ;internal_NT
+        ALTNUMPAD_BIT: bool = false,
+        Unused27: u2 = 0,
+        /// DBCS for JPN: IME enable/disable.
+        NLS_IME_DISABLE: bool = false,
+        Unused30: u2 = 0,
+    };
+
+    /// - ref: um/wincontypes.h
+    pub const INPUT_RECORD = extern struct {
+        EventType: EVENT_TYPE,
+        Event: EVENT,
+
+        /// NOTE(freemaker): these are specified as flags
+        /// but are used as an enum
+        pub const EVENT_TYPE = enum(WORD) {
+            KEY = 0x0001,
+            MOUSE = 0x0002,
+            WINDOW_BUFFER_SIZE = 0x0004,
+            MENU = 0x0008,
+            FOCUS = 0x0010,
+            _,
+        };
+
+        pub const EVENT = extern union {
+            Key: KEY_EVENT,
+            Mouse: MOUSE_EVENT,
+            WindowBufferSize: WINDOW_BUFFER_SIZE_EVENT,
+            Menu: MENU_EVENT,
+            Focus: FOCUS_EVENT,
+        };
+
+        pub const KEY_EVENT = extern struct {
+            bKeyDown: BOOL,
+            wRepeatCount: WORD,
+            wVirtualKeyCode: WORD,
+            wVirtualScanCode: WORD,
+            uChar: extern union {
+                Unicode: WCHAR,
+                Ascii: CHAR,
+            },
+            dwControlKeyState: CONTROL_KEY_STATE,
+        };
+
+        pub const MOUSE_EVENT = extern struct {
+            dwMousePosition: COORD,
+            dwButtonState: BUTTON_STATE,
+            dwControlKeyState: CONTROL_KEY_STATE,
+            dwEventFlags: FLAGS,
+
+            pub const BUTTON_STATE = packed struct(DWORD) {
+                // ref: https://github.com/microsoft/terminal/src/terminal/parser/InputStateMachineEngine.cpp
+
+                /// usually left mouse button
+                FROM_LEFT_1ST_BUTTON_PRESSED: bool = false,
+                /// usually right mouse button
+                RIGHTMOST_BUTTON_PRESSED: bool = false,
+                /// usually middle mouse button
+                FROM_LEFT_2ND_BUTTON_PRESSED: bool = false,
+                FROM_LEFT_3RD_BUTTON_PRESSED: bool = false,
+                FROM_LEFT_4TH_BUTTON_PRESSED: bool = false,
+                Unused5: u17 = 0,
+                /// - ref: https://github.com/microsoft/terminal/src/terminal/parser/InputStateMachineEngine.hpp
+                SCROLL_DELTA: bool = false,
+                Unused23: u9 = 0,
+
+                /// - ref: https://github.com/microsoft/terminal/src/terminal/parser/InputStateMachineEngine.hpp
+                pub fn isScrollDeltaForward(self: BUTTON_STATE) bool {
+                    return self.SCROLL_DELTA and @as(DWORD, @bitCast(self)) & 0xFF000000 == 0;
+                }
+
+                /// - ref: https://github.com/microsoft/terminal/src/terminal/parser/InputStateMachineEngine.hpp
+                pub fn isScrollDeltaBackward(self: BUTTON_STATE) bool {
+                    return self.SCROLL_DELTA and @as(DWORD, @bitCast(self)) & 0xFF000000 != 0;
+                }
+
+                pub fn getWheelDirection(self: BUTTON_STATE) WHEEL_DIRECTION {
+                    std.debug.assert(self.SCROLL_DELTA);
+
+                    return if (self.isScrollDeltaForward())
+                        .FORWARD
+                    else
+                        .BACKWARD;
+                }
+
+                pub const WHEEL_DIRECTION = enum(u1) {
+                    FORWARD,
+                    BACKWARD,
+                };
+            };
+
+            pub const FLAGS = packed struct(DWORD) {
+                MOVED: bool = false,
+                DOUBLE_CLICK: bool = false,
+                WHEELED: bool = false,
+                HWHEELED: bool = false,
+                Unused4: u28 = 0,
+            };
+        };
+
+        pub const WINDOW_BUFFER_SIZE_EVENT = extern struct {
+            dwSize: COORD,
+        };
+
+        pub const MENU_EVENT = extern struct {
+            dwCommandId: UINT,
+        };
+
+        pub const FOCUS_EVENT = extern struct {
+            bSetFocus: BOOL,
+        };
     };
 
     /// - ref: https://github.com/microsoft/terminal/dep/Console/conmsgl1.h
@@ -2242,10 +2406,10 @@ pub const CONSOLE = struct {
 
     // ref: https://github.com/microsoft/terminal/dep/Console/conmsgl1.h
 
-    pub const GetConsoleCPMsg = MSG(GETCP_BODY, .L1(.GetCP));
+    pub const GetCPMsg = MSG(GETCP_BODY, .L1(.GetCP));
     pub const GETCP_BODY = extern struct {
         /// - *OUT*
-        CodePage: ULONG,
+        CodePage: CODEPAGE,
         /// - *IN*
         Output: BOOLEAN,
     };
@@ -2264,12 +2428,13 @@ pub const CONSOLE = struct {
         ReadyEvents: ULONG,
     };
 
+    /// uses 1 output IO_BUFFER of type [*]INPUT_RECORD
     pub const GetConsoleInputMsg = MSG(INPUT_BODY, .L1(.GetConsoleInput));
     pub const INPUT_BODY = extern struct {
         /// - *OUT*
         NumRecords: ULONG,
         /// - *IN*
-        Flags: FLAGS,
+        Flags: FLAGS = .{},
         /// - *IN*
         Unicode: BOOLEAN,
 
@@ -2278,6 +2443,12 @@ pub const CONSOLE = struct {
             READ_NOREMOVE: bool = false,
             READ_NOWAIT: bool = false,
             Unused2: u14 = 0,
+
+            pub const READ_VALID: FLAGS = .{
+                .READ_NOREMOVE = true,
+                .READ_NOWAIT = true,
+                .Unused2 = 0,
+            };
         };
     };
 
@@ -2331,39 +2502,6 @@ pub const CONSOLE = struct {
             GroupSeparator: bool = false,
             RecordSeparator: bool = false,
             UnitSeparator: bool = false,
-        };
-
-        /// - ref: um/wincontypes.h
-        pub const CONTROL_KEY_STATE = packed struct(ULONG) {
-            RIGHT_ALT_PRESSED: bool = false,
-            LEFT_ALT_PRESSED: bool = false,
-            RIGHT_CTRL_PRESSED: bool = false,
-            LEFT_CTRL_PRESSED: bool = false,
-            SHIFT_PRESSED: bool = false,
-            NUMLOCK_ON: bool = false,
-            SCROLLLOCK_ON: bool = false,
-            CAPSLOCK_ON: bool = false,
-            ENHANCED_KEY: bool = false,
-            Unused9: u7 = 0,
-            /// DBCS for JPN: SBCS/DBCS mode.
-            NLS_DBCSCHAR: bool = false,
-            // NOTE(freemaker): here this one is listed NLS_APLHANUMERIC with 0x00000000 ('DBCS for JPN: Alphanumeric mode.')
-            /// DBCS for JPN: Katakana mode.
-            NLS_KATAKANA: bool = false,
-            /// DBCS for JPN: Hiragana mode.
-            NLS_HIRAGANA: bool = false,
-            Unused19: u3 = 0,
-            /// DBCS for JPN: Roman/Noroman mode.
-            NLS_ROMAN: bool = false,
-            /// DBCS for JPN: IME conversion.
-            NLS_IME_CONVERSION: bool = false,
-            Unused24: u2 = 0,
-            /// AltNumpad OEM char (copied from ntuser\inc\kbd.h) ;internal_NT
-            ALTNUMPAD_BIT: bool = false,
-            Unused27: u2 = 0,
-            /// DBCS for JPN: IME enable/disable.
-            NLS_IME_DISABLE: bool = false,
-            Unused30: u2 = 0,
         };
     };
 
@@ -2434,7 +2572,7 @@ pub const CONSOLE = struct {
     pub const SetCPMsg = MSG(SETCP_BODY, .L2(.SetCP));
     pub const SETCP_BODY = extern struct {
         /// - *IN*
-        CodePage: ULONG,
+        CodePage: CODEPAGE,
         /// - *IN*
         Output: BOOLEAN,
     };
@@ -3021,6 +3159,14 @@ pub const CONSOLE = struct {
 // -------------------------------
 // |          Functions          |
 // -------------------------------
+
+/// - ref: um/winternl.h
+/// - version: WIN2K - ...
+pub extern "ntdll" fn NtWaitForSingleObject(
+    Handle: HANDLE,
+    Alertable: BOOLEAN,
+    Timeout: ?*const LARGE_INTEGER,
+) callconv(.winapi) NTSTATUS;
 
 /// - ref: km/ntifs.h
 /// - version: WIN2K - ...
