@@ -32,8 +32,8 @@ pub fn build(b: *std.Build) void {
 
     if (target.result.os.tag == .windows) {
         // @TODO: port to dependency when extracting into own library
-        const ntdll_mods = @import("src_ntdll/ntdll_build.zig").build(b, test_step, target, optimize);
-        zttio_mod.addImport("ntdll", ntdll_mods[1]);
+        const ntdll_mod = @import("ntdll/ntdll_build.zig").build(b, test_step, target, optimize);
+        zttio_mod.addImport("ntdll", ntdll_mod);
     }
 
     const example_exe = b.addExecutable(.{

@@ -1,6 +1,66 @@
 const std = @import("std");
 const assert = std.debug.assert;
 
+pub const UnexpectedError = error{
+    /// The Operating System returned an undocumented error code.
+    ///
+    /// This error is in theory not possible, but it would be better
+    /// to handle this error than to invoke undefined behavior.
+    ///
+    /// When this error code is observed, it usually means the Library needs a small patch
+    /// to add the error code to the error set for the respective function.
+    Unexpected,
+};
+
+threadlocal var lastUnexpectedStatus: NTSTATUS = .SUCCESS;
+
+pub fn unexpectedStatus(status: NTSTATUS) UnexpectedError {
+    // TODO: implement build option
+    if (true) {
+        std.debug.print("error.Unexpected NTSTATUS=0x{x} ({s})\n", .{
+            @intFromEnum(status),
+            std.enums.tagName(NTSTATUS, status) orelse "<unnamed>",
+        });
+        std.debug.dumpCurrentStackTrace(.{ .first_address = @returnAddress() });
+    }
+    // TODO: implement build option
+    if (true) {
+        lastUnexpectedStatus = status;
+    }
+    return error.Unexpected;
+}
+
+pub fn getLastUnexpectedStatus() NTSTATUS {
+    return lastUnexpectedStatus;
+}
+
+test {
+    @setEvalBranchQuota(1_000_000);
+    refAllDeclsRecursive(@This());
+}
+
+/// Given a type, recursively references all the declarations inside,
+/// so that the semantic analyzer sees them.
+/// For deep types, you may use `@setEvalBranchQuota`.
+fn refAllDeclsRecursive(comptime T: type) void {
+    inline for (comptime std.meta.declarations(T)) |decl| {
+        if (@TypeOf(@field(T, decl.name)) == type) {
+            switch (@typeInfo(@field(T, decl.name))) {
+                .@"struct",
+                .@"enum",
+                .@"union",
+                .@"opaque",
+                => refAllDeclsRecursive(@field(T, decl.name)),
+
+                else => {},
+            }
+        }
+        _ = &@field(T, decl.name);
+
+        // @compileLog(decl, @field(T, decl.name), T);
+    }
+}
+
 // ref: https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-dtyp/cca27429-5689-4a16-b2b4-9325d93e4ba2
 
 pub fn P(comptime T: type) type {
@@ -2024,7 +2084,7 @@ pub const CON_DRV = struct {
         Size: ULONG,
         Buffer: P(VOID),
 
-        pub fn from(self: *IO_BUFFER, buffer_ptr: anytype) void {
+        pub fn is(self: *IO_BUFFER, buffer_ptr: anytype) void {
             if (@typeInfo(@TypeOf(buffer_ptr)) != .pointer) {
                 @compileError("expected a pointer or a slice, got: " ++ @typeName(@TypeOf(buffer_ptr)));
             }

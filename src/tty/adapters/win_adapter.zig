@@ -23,14 +23,14 @@ stdout: windows.HANDLE,
 stdout_buf: []u8,
 stdout_writer: std.Io.File.Writer,
 
-events: [INPUT_RECORD_BUF_LEN]ntdll.raw.CONSOLE.INPUT_RECORD = undefined,
+events: [INPUT_RECORD_BUF_LEN]ntdll.CONSOLE.INPUT_RECORD = undefined,
 events_count: usize = 0,
 events_pos: usize = 0,
 
 utf16_buf: [2]u16 = undefined,
 utf16_half: bool = false,
 
-last_mouse_button_press: ntdll.raw.CONSOLE.INPUT_RECORD.MOUSE_EVENT.BUTTON_STATE = .{},
+last_mouse_button_press: ntdll.CONSOLE.INPUT_RECORD.MOUSE_EVENT.BUTTON_STATE = .{},
 
 org_state: ?ConsoleMode = null,
 
@@ -82,15 +82,15 @@ fn getWriter(self_ptr: *anyopaque) *std.Io.Writer {
 fn getWinsize(self_ptr: *anyopaque) Adapter.GetWinsizeError!Winsize {
     const self: *WinAdapter = @ptrCast(@alignCast(self_ptr));
 
-    var screen_buffer_info_msg: ntdll.raw.CONSOLE.GetScreenBufferInfoMsg = .{};
+    var screen_buffer_info_msg: ntdll.CONSOLE.GetScreenBufferInfoMsg = .{};
     const screen_buffer_info = &screen_buffer_info_msg.Body;
     {
-        var user_io: ntdll.raw.CON_DRV.USER_DEFINED_IO(1, 1) = .{};
-        user_io.Buffers[0].from(&screen_buffer_info_msg);
-        user_io.Buffers[1].from(screen_buffer_info);
+        var user_io: ntdll.CON_DRV.USER_DEFINED_IO(1, 1) = .{};
+        user_io.Buffers[0].is(&screen_buffer_info_msg);
+        user_io.Buffers[1].is(screen_buffer_info);
 
-        var iosb: ntdll.raw.IO_STATUS_BLOCK = undefined;
-        switch (ntdll.raw.NtDeviceIoControlFile(
+        var iosb: ntdll.IO_STATUS_BLOCK = undefined;
+        switch (ntdll.NtDeviceIoControlFile(
             self.stdout,
             null,
             null,
@@ -291,12 +291,12 @@ fn read(self_ptr: *anyopaque) Adapter.ReadError!?ReadResult {
                 defer self.last_mouse_button_press = event.dwButtonState;
 
                 // see https://learn.microsoft.com/en-us/windows/console/mouse-event-record-str
-                const button_xor: ntdll.raw.CONSOLE.INPUT_RECORD.MOUSE_EVENT.BUTTON_STATE =
-                    @bitCast(@as(ntdll.raw.DWORD, @bitCast(self.last_mouse_button_press)) ^
-                        @as(ntdll.raw.DWORD, @bitCast(event.dwButtonState)));
+                const button_xor: ntdll.CONSOLE.INPUT_RECORD.MOUSE_EVENT.BUTTON_STATE =
+                    @bitCast(@as(ntdll.DWORD, @bitCast(self.last_mouse_button_press)) ^
+                        @as(ntdll.DWORD, @bitCast(event.dwButtonState)));
                 var event_type: Mouse.Action = .press;
 
-                const btn: Mouse.Button = switch (@as(u16, @truncate(@as(ntdll.raw.DWORD, @bitCast(button_xor))))) {
+                const btn: Mouse.Button = switch (@as(u16, @truncate(@as(ntdll.DWORD, @bitCast(button_xor))))) {
                     0x0000 => blk: {
                         if (event.dwEventFlags.WHEELED) {
                             switch (event.dwButtonState.getWheelDirection()) {
@@ -307,7 +307,7 @@ fn read(self_ptr: *anyopaque) Adapter.ReadError!?ReadResult {
 
                         // If we have no change but one of the buttons is still pressed we have a
                         // drag event. Find out which button is held down
-                        if (@as(ntdll.raw.DWORD, @bitCast(event.dwButtonState)) > 0 and event.dwEventFlags.MOVED) {
+                        if (@as(ntdll.DWORD, @bitCast(event.dwButtonState)) > 0 and event.dwEventFlags.MOVED) {
                             event_type = .drag;
                             if (event.dwButtonState.FROM_LEFT_1ST_BUTTON_PRESSED) {
                                 break :blk .left;
@@ -411,7 +411,7 @@ fn read(self_ptr: *anyopaque) Adapter.ReadError!?ReadResult {
     }
 }
 
-inline fn translateMods(mods: ntdll.raw.CONSOLE.CONTROL_KEY_STATE) Key.Modifiers {
+inline fn translateMods(mods: ntdll.CONSOLE.CONTROL_KEY_STATE) Key.Modifiers {
     return .{
         .shift = mods.SHIFT_PRESSED,
         .alt = mods.LEFT_ALT_PRESSED or mods.RIGHT_ALT_PRESSED,
@@ -421,7 +421,7 @@ inline fn translateMods(mods: ntdll.raw.CONSOLE.CONTROL_KEY_STATE) Key.Modifiers
     };
 }
 
-fn peekEvent(self: *WinAdapter) error{ReadFailed}!?ntdll.raw.CONSOLE.INPUT_RECORD {
+fn peekEvent(self: *WinAdapter) error{ReadFailed}!?ntdll.CONSOLE.INPUT_RECORD {
     if (self.events_pos >= self.events_count) {
         if (!(self.readNextEvents() catch |err| switch (err) {
             error.Unexpected => return error.ReadFailed,
@@ -446,7 +446,7 @@ fn readNextEvents(self: *WinAdapter) ntdll.UnexpectedError!bool {
     self.events_count = 0;
     self.events_pos = 0;
 
-    var read_console_input_msg: ntdll.raw.CONSOLE.GetConsoleInputMsg = .{ .Body = .{
+    var read_console_input_msg: ntdll.CONSOLE.GetConsoleInputMsg = .{ .Body = .{
         .NumRecords = 0,
         .Flags = .{
             .READ_NOWAIT = true,
@@ -454,13 +454,13 @@ fn readNextEvents(self: *WinAdapter) ntdll.UnexpectedError!bool {
         .Unicode = .FALSE,
     } };
     {
-        var user_io: ntdll.raw.CON_DRV.USER_DEFINED_IO(1, 2) = .{};
-        user_io.Buffers[0].from(&read_console_input_msg);
-        user_io.Buffers[1].from(&read_console_input_msg.Body);
-        user_io.Buffers[2].from(&self.events);
+        var user_io: ntdll.CON_DRV.USER_DEFINED_IO(1, 2) = .{};
+        user_io.Buffers[0].is(&read_console_input_msg);
+        user_io.Buffers[1].is(&read_console_input_msg.Body);
+        user_io.Buffers[2].is(&self.events);
 
-        var iosb: ntdll.raw.IO_STATUS_BLOCK = undefined;
-        switch (ntdll.raw.NtDeviceIoControlFile(
+        var iosb: ntdll.IO_STATUS_BLOCK = undefined;
+        switch (ntdll.NtDeviceIoControlFile(
             self.stdin,
             null,
             null,
@@ -492,15 +492,13 @@ fn waitForStdinData(self_ptr: *anyopaque, milliseconds: u16) void {
     const self: *WinAdapter = @ptrCast(@alignCast(self_ptr));
 
     const timeout: i64 = -@as(i64, milliseconds) * 10_000;
-    _ = ntdll.raw.NtWaitForSingleObject(self.stdin, .FALSE, &timeout);
+    _ = ntdll.NtWaitForSingleObject(self.stdin, .FALSE, &timeout);
 }
 
 const ConsoleMode = struct {
-    // pub const utf8_codepage: ntdll.raw.CONSOLE.CODEPAGE = 65001;
-
-    codepage: ntdll.raw.CONSOLE.CODEPAGE,
-    input_mode: ntdll.raw.CONSOLE.MODE.INPUT,
-    output_mode: ntdll.raw.CONSOLE.MODE.OUTPUT,
+    codepage: ntdll.CONSOLE.CODEPAGE,
+    input_mode: ntdll.CONSOLE.MODE.INPUT,
+    output_mode: ntdll.CONSOLE.MODE.OUTPUT,
 };
 
 fn enable(self_ptr: *anyopaque) Adapter.EnableError!bool {
@@ -520,7 +518,7 @@ fn enable(self_ptr: *anyopaque) Adapter.EnableError!bool {
         .output_mode = org_output_mode,
     };
 
-    const input_raw_mode: ntdll.raw.CONSOLE.MODE.INPUT = .{
+    const input_raw_mode: ntdll.CONSOLE.MODE.INPUT = .{
         .ENABLE_WINDOW_INPUT = true, // resize events
         .ENABLE_MOUSE_INPUT = true,
         .ENABLE_EXTENDED_FLAGS = true, // allow mouse events
@@ -530,7 +528,7 @@ fn enable(self_ptr: *anyopaque) Adapter.EnableError!bool {
         .ENABLE_VIRTUAL_TERMINAL_INPUT = true,
     };
 
-    const output_raw_mode: ntdll.raw.CONSOLE.MODE.OUTPUT = .{
+    const output_raw_mode: ntdll.CONSOLE.MODE.OUTPUT = .{
         .ENABLE_PROCESSED_OUTPUT = true,
         .ENABLE_VIRTUAL_TERMINAL_PROCESSING = true,
     };
@@ -561,19 +559,19 @@ fn isEnabled(self_ptr: *anyopaque) bool {
     return self.org_state != null;
 }
 
-fn getConsoleCP(handle: ntdll.HANDLE) error{Unexpected}!ntdll.raw.CONSOLE.CODEPAGE {
-    var get_console_cp: ntdll.raw.CONSOLE.GetCPMsg = .{ .Body = .{
+fn getConsoleCP(handle: ntdll.HANDLE) error{Unexpected}!ntdll.CONSOLE.CODEPAGE {
+    var get_console_cp: ntdll.CONSOLE.GetCPMsg = .{ .Body = .{
         .CodePage = undefined,
         .Output = .FALSE,
     } };
 
     {
-        var user_io: ntdll.raw.CON_DRV.USER_DEFINED_IO(1, 1) = .{};
-        user_io.Buffers[0].from(&get_console_cp);
-        user_io.Buffers[1].from(&get_console_cp.Body);
+        var user_io: ntdll.CON_DRV.USER_DEFINED_IO(1, 1) = .{};
+        user_io.Buffers[0].is(&get_console_cp);
+        user_io.Buffers[1].is(&get_console_cp.Body);
 
-        var iosb: ntdll.raw.IO_STATUS_BLOCK = undefined;
-        switch (ntdll.raw.NtDeviceIoControlFile(
+        var iosb: ntdll.IO_STATUS_BLOCK = undefined;
+        switch (ntdll.NtDeviceIoControlFile(
             handle,
             null,
             null,
@@ -595,18 +593,18 @@ fn getConsoleCP(handle: ntdll.HANDLE) error{Unexpected}!ntdll.raw.CONSOLE.CODEPA
     return get_console_cp.Body.CodePage;
 }
 
-fn setConsoleCP(handle: ntdll.HANDLE, codepage: ntdll.raw.CONSOLE.CODEPAGE) error{Unexpected}!void {
-    var set_console_output_cp: ntdll.raw.CONSOLE.SetCPMsg = .{ .Body = .{
+fn setConsoleCP(handle: ntdll.HANDLE, codepage: ntdll.CONSOLE.CODEPAGE) error{Unexpected}!void {
+    var set_console_output_cp: ntdll.CONSOLE.SetCPMsg = .{ .Body = .{
         .CodePage = codepage,
         .Output = .FALSE,
     } };
 
     {
-        var user_io: ntdll.raw.CON_DRV.USER_DEFINED_IO(1, 0) = .{};
-        user_io.Buffers[0].from(&set_console_output_cp);
+        var user_io: ntdll.CON_DRV.USER_DEFINED_IO(1, 0) = .{};
+        user_io.Buffers[0].is(&set_console_output_cp);
 
-        var iosb: ntdll.raw.IO_STATUS_BLOCK = undefined;
-        switch (ntdll.raw.NtDeviceIoControlFile(
+        var iosb: ntdll.IO_STATUS_BLOCK = undefined;
+        switch (ntdll.NtDeviceIoControlFile(
             handle,
             null,
             null,
@@ -626,15 +624,15 @@ fn setConsoleCP(handle: ntdll.HANDLE, codepage: ntdll.raw.CONSOLE.CODEPAGE) erro
     }
 }
 
-fn getConsoleMode(handle: ntdll.HANDLE) error{ InvalidHandle, Unexpected }!ntdll.raw.CONSOLE.MODE {
-    var get_console_mode_msg: ntdll.raw.CONSOLE.GetModeMsg = .{};
+fn getConsoleMode(handle: ntdll.HANDLE) error{ InvalidHandle, Unexpected }!ntdll.CONSOLE.MODE {
+    var get_console_mode_msg: ntdll.CONSOLE.GetModeMsg = .{};
     {
-        var user_io: ntdll.raw.CON_DRV.USER_DEFINED_IO(1, 1) = .{};
-        user_io.Buffers[0].from(&get_console_mode_msg);
-        user_io.Buffers[1].from(&get_console_mode_msg.Body);
+        var user_io: ntdll.CON_DRV.USER_DEFINED_IO(1, 1) = .{};
+        user_io.Buffers[0].is(&get_console_mode_msg);
+        user_io.Buffers[1].is(&get_console_mode_msg.Body);
 
-        var iosb: ntdll.raw.IO_STATUS_BLOCK = undefined;
-        switch (ntdll.raw.NtDeviceIoControlFile(
+        var iosb: ntdll.IO_STATUS_BLOCK = undefined;
+        switch (ntdll.NtDeviceIoControlFile(
             handle,
             null,
             null,
@@ -657,17 +655,17 @@ fn getConsoleMode(handle: ntdll.HANDLE) error{ InvalidHandle, Unexpected }!ntdll
     return get_console_mode_msg.Body.Mode;
 }
 
-fn setConsoleMode(handle: ntdll.HANDLE, mode: ntdll.raw.CONSOLE.MODE) error{ InvalidHandle, Unexpected }!void {
-    var set_console_mode_msg: ntdll.raw.CONSOLE.SetModeMsg = .{ .Body = .{
+fn setConsoleMode(handle: ntdll.HANDLE, mode: ntdll.CONSOLE.MODE) error{ InvalidHandle, Unexpected }!void {
+    var set_console_mode_msg: ntdll.CONSOLE.SetModeMsg = .{ .Body = .{
         .Mode = mode,
     } };
     {
-        var user_io: ntdll.raw.CON_DRV.USER_DEFINED_IO(1, 1) = .{};
-        user_io.Buffers[0].from(&set_console_mode_msg);
-        user_io.Buffers[1].from(&set_console_mode_msg.Body);
+        var user_io: ntdll.CON_DRV.USER_DEFINED_IO(1, 1) = .{};
+        user_io.Buffers[0].is(&set_console_mode_msg);
+        user_io.Buffers[1].is(&set_console_mode_msg.Body);
 
-        var iosb: ntdll.raw.IO_STATUS_BLOCK = undefined;
-        switch (ntdll.raw.NtDeviceIoControlFile(
+        var iosb: ntdll.IO_STATUS_BLOCK = undefined;
+        switch (ntdll.NtDeviceIoControlFile(
             handle,
             null,
             null,
