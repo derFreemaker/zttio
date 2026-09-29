@@ -1,5 +1,6 @@
 const std = @import("std");
 const assert = std.debug.assert;
+const builtin = @import("builtin");
 
 pub const UnexpectedError = error{
     /// The Operating System returned an undocumented error code.
@@ -28,6 +29,16 @@ pub fn unexpectedStatus(status: NTSTATUS) UnexpectedError {
         lastUnexpectedStatus = status;
     }
     return error.Unexpected;
+}
+
+pub fn statusBug(status: NTSTATUS) UnexpectedError {
+    switch (builtin.mode) {
+        .Debug => std.debug.panic("programmer bug caused NTSTATUS=0x{x} ({s})", .{
+            @intFromEnum(status),
+            std.enums.tagName(NTSTATUS, status) orelse "<unnamed>",
+        }),
+        else => return error.Unexpected,
+    }
 }
 
 pub fn getLastUnexpectedStatus() NTSTATUS {
@@ -143,6 +154,8 @@ pub const LARGE_INTEGER = i64;
 // pub const DOUBLE = f64;
 
 pub const HANDLE = P(VOID);
+pub const INVALID_HANDLE: HANDLE = @ptrFromInt(std.math.maxInt(usize));
+
 pub const HWND = HANDLE;
 
 // pub const BSTR = [*:0]WCHAR;
@@ -157,48 +170,93 @@ pub const HWND = HANDLE;
 
 // pub const va_list = *opaque {};
 
-fn STRING(comptime Char: type) type {
-    return extern struct {
-        Length: USHORT,
-        MaximumLength: USHORT,
-        Buffer: ?[*]Char,
+pub const ANIS_STRING = extern struct {
+    Length: USHORT,
+    MaximumLength: USHORT,
+    Buffer: ?[*]CHAR,
 
-        pub const empty: @This() = .{ .Length = 0, .MaximumLength = 0, .Buffer = null };
+    pub const empty: @This() = .{ .Length = 0, .MaximumLength = 0, .Buffer = null };
 
-        pub fn init(string: []const Char) @This() {
-            const len: USHORT = @intCast(@sizeOf(Char) * string.len);
-            return .{
-                .Length = len,
-                .MaximumLength = len,
-                .Buffer = @constCast(string.ptr),
-            };
-        }
+    pub fn init(string: []const CHAR) @This() {
+        const len: USHORT = @intCast(@sizeOf(CHAR) * string.len);
+        return .{
+            .Length = len,
+            .MaximumLength = len,
+            .Buffer = @constCast(string.ptr),
+        };
+    }
 
-        pub fn initZ(string: [:0]const Char) @This() {
-            const len: USHORT = @intCast(@sizeOf(Char) * string.len);
-            return .{
-                .Length = len,
-                .MaximumLength = len + @sizeOf(Char),
-                .Buffer = @constCast(string.ptr),
-            };
-        }
+    pub fn initZ(string: [:0]const CHAR) @This() {
+        const len: USHORT = @intCast(@sizeOf(CHAR) * string.len);
+        return .{
+            .Length = len,
+            .MaximumLength = len + @sizeOf(CHAR),
+            .Buffer = @constCast(string.ptr),
+        };
+    }
 
-        pub fn isEmpty(string: *const @This()) bool {
-            return string.Length == 0;
-        }
+    pub fn isEmpty(string: *const @This()) bool {
+        return string.Length == 0;
+    }
 
-        pub fn slice(string: *const @This()) []Char {
-            return if (string.isEmpty()) &.{} else string.Buffer.?[0..@divExact(string.Length, @sizeOf(Char))];
-        }
+    pub fn slice(string: *const @This()) []CHAR {
+        return if (string.isEmpty()) &.{} else string.Buffer.?[0..@divExact(string.Length, @sizeOf(CHAR))];
+    }
 
-        pub fn sliceZ(string: *const @This()) [:0]Char {
-            assert(string.Length + @sizeOf(Char) <= string.MaximumLength);
-            return string.Buffer.?[0..@divExact(string.Length, @sizeOf(Char)) :0];
-        }
-    };
-}
-pub const ANSI_STRING = STRING(CHAR);
-pub const UNICODE_STRING = STRING(WCHAR);
+    pub fn sliceZ(string: *const @This()) [:0]CHAR {
+        assert(string.Length + @sizeOf(CHAR) <= string.MaximumLength);
+        return string.Buffer.?[0..@divExact(string.Length, @sizeOf(CHAR)) :0];
+    }
+};
+
+pub const UNICODE_STRING = extern struct {
+    Length: USHORT,
+    MaximumLength: USHORT,
+    Buffer: ?[*]WCHAR,
+
+    pub const empty: @This() = .{ .Length = 0, .MaximumLength = 0, .Buffer = null };
+
+    pub fn init(str: []const WCHAR) @This() {
+        const len: USHORT = @intCast(@sizeOf(WCHAR) * str.len);
+        return .{
+            .Length = len,
+            .MaximumLength = len,
+            .Buffer = @constCast(str.ptr),
+        };
+    }
+
+    pub fn initZ(str: [:0]const WCHAR) @This() {
+        const len: USHORT = @intCast(@sizeOf(WCHAR) * str.len);
+        return .{
+            .Length = len,
+            .MaximumLength = len + @sizeOf(WCHAR),
+            .Buffer = @constCast(str.ptr),
+        };
+    }
+
+    pub fn initFromUTF8Comptime(comptime str: []const u8) @This() {
+        const unicode_str = std.unicode.utf8ToUtf16LeStringLiteral(str);
+        const len: USHORT = @intCast(@sizeOf(WCHAR) * str.len);
+        return .{
+            .Length = len,
+            .MaximumLength = len + @sizeOf(WCHAR),
+            .Buffer = @constCast(unicode_str),
+        };
+    }
+
+    pub fn isEmpty(string: *const @This()) bool {
+        return string.Length == 0;
+    }
+
+    pub fn slice(string: *const @This()) []WCHAR {
+        return if (string.isEmpty()) &.{} else string.Buffer.?[0..@divExact(string.Length, @sizeOf(WCHAR))];
+    }
+
+    pub fn sliceZ(string: *const @This()) [:0]WCHAR {
+        assert(string.Length + @sizeOf(WCHAR) <= string.MaximumLength);
+        return string.Buffer.?[0..@divExact(string.Length, @sizeOf(WCHAR)) :0];
+    }
+};
 
 pub const NTSTATUS = @import("ntstatus.zig").NTSTATUS;
 
@@ -1531,7 +1589,7 @@ pub const OBJECT = struct {
         /// This must either be a fully qualified object name, or a relative path name to the directory
         /// specified by the `RootDirectory` member.
         ObjectName: P(UNICODE_STRING) = @constCast(&UNICODE_STRING.empty),
-        Attributes: Flags,
+        Attributes: Flags = .{},
         /// Specifies a `SECURITY.DESCRIPTOR` for the object when the object is created.
         /// If `SecurityDescriptor` is `null`, the object will receive default security settings.
         /// See [DACL for a New Object](https://learn.microsoft.com/en-us/windows/win32/secauthz/dacl-for-a-new-object).
@@ -3205,22 +3263,63 @@ pub const CONSOLE = struct {
 // |          Functions          |
 // -------------------------------
 
-/// - ref: um/winternl.h
-/// - version: WIN2K - ...
+/// ### References
+/// - um/winternl.h
+///
+/// ### Version
+/// WIN2K - ...
 pub extern "ntdll" fn NtWaitForSingleObject(
-    Handle: HANDLE,
-    Alertable: BOOLEAN,
-    Timeout: ?*const LARGE_INTEGER,
+    IN_Handle: HANDLE,
+    IN_Alertable: BOOLEAN,
+    IN_OPT_Timeout: ?*const LARGE_INTEGER,
 ) callconv(.winapi) NTSTATUS;
 
-/// - ref: km/ntifs.h
-/// - version: WIN2K - ...
+/// ### Notable return values
+/// - `.SUCCESS` - the thread woke due to the timeout
+/// - `.USER_APC` - the sleep was interrupted by an APC
+/// - `.ALERTED` - the sleep was interrupted by a call to `NtAlertThread`
+/// - `.NO_YIELD_PERFORMED` - a zero-timeout sleep did not cause switching to other threads
+///
+/// ### References
+/// - <phnt>/include/ntexapi.h
+/// - https://ntdoc.m417z.com/ntdelayexecution
+///
+/// ### Version
+/// unknown
+pub extern "ntdll" fn NtDelayExecution(
+    IN_Alertable: BOOLEAN,
+    IN_DelayInterval: PC(LARGE_INTEGER),
+) callconv(.winapi) NTSTATUS;
+
+/// ### References
+/// - km/ntifs.h
+///
+/// ### Version
+/// WIN2K - ...
 pub extern "ntdll" fn NtClose(
     IN_Handle: HANDLE,
 ) callconv(.winapi) NTSTATUS;
 
-/// - ref: km/ntifs.h
-/// - version: WIN2K - ...
+/// Convenience wrapper for `NtClose` ignoring any not `.SUCCESS` status.
+///
+/// While still saving any status that is not `.SUCCESS`,
+/// if last unexpected status preservation is enabled.
+///
+/// Following zig's standard that resource deallocation cannot fail.
+pub fn NtCloseSafe(handle: HANDLE) void {
+    switch (NtClose(handle)) {
+        .SUCCESS => {},
+        else => |status| {
+            unexpectedStatus(status) catch {};
+        },
+    }
+}
+
+/// ### References
+/// - km/ntifs.h
+///
+/// ### Version
+/// WIN2K - ...
 pub extern "ntdll" fn NtOpenFile(
     OUT_FileHandle: P(HANDLE),
     IN_DesiredAccess: ACCESS_MASK,
@@ -3230,8 +3329,11 @@ pub extern "ntdll" fn NtOpenFile(
     IN_OpenOptions: FILE.MODE,
 ) callconv(.winapi) NTSTATUS;
 
-/// - ref: km/ntifs.h
-/// - version: WIN2K - ...
+/// ### References
+/// - km/ntifs.h
+///
+/// ### Version
+/// WIN2K - ...
 pub extern "ntdll" fn NtDeviceIoControlFile(
     IN_FileHandle: HANDLE,
     IN_Event: ?HANDLE,
@@ -3245,9 +3347,12 @@ pub extern "ntdll" fn NtDeviceIoControlFile(
     IN_OutputBufferLength: ULONG,
 ) callconv(.winapi) NTSTATUS;
 
-/// - ref: <phnt>/ntioapi.h
-/// - ref: https://learn.microsoft.com/en-us/windows/win32/devnotes/nt-create-named-pipe-file
-/// - version: unknown
+/// ### References
+/// - <phnt>/ntioapi.h
+/// - https://learn.microsoft.com/en-us/windows/win32/devnotes/nt-create-named-pipe-file
+///
+/// ### Version
+/// unknown
 pub extern "ntdll" fn NtCreateNamedPipeFile(
     OUT_FileHandle: P(HANDLE),
     IN_DesiredAccess: ACCESS_MASK,
