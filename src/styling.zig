@@ -147,6 +147,8 @@ pub const Color = union(enum(u2)) {
     }
 
     pub fn eql(self: Color, other: Color) bool {
+        @compileLog(@sizeOf(Color));
+
         if (std.meta.activeTag(self) != std.meta.activeTag(other)) {
             return false;
         }
@@ -201,7 +203,7 @@ pub const Color = union(enum(u2)) {
     pub fn printAsArg(self: Color, buf: []u8, layer: Layer) BufPrintError![]u8 {
         return switch (self) {
             .inherit => &.{},
-            .c8 => |c8| try std.fmt.bufPrint(buf, "{d}", .{@intFromEnum(c8) + layer.modifier()}),
+            .c8 => |c8| try std.fmt.bufPrint(buf, "{d}", .{@backingInt(c8) + layer.modifier()}),
             .b8 => |n| try std.fmt.bufPrint(buf, "{d};5;{d}", .{ layer.index(), n }),
             .rgb8 => |rgb8| try std.fmt.bufPrint(buf, "{d};2;{d};{d};{d}", .{ layer.index(), rgb8.r, rgb8.g, rgb8.b }),
         };
@@ -242,7 +244,7 @@ pub const Color = union(enum(u2)) {
         bright_white,
     };
 
-    pub const Rgb = struct {
+    pub const Rgb = packed struct(u24) {
         r: u8,
         g: u8,
         b: u8,
@@ -252,13 +254,13 @@ pub const Color = union(enum(u2)) {
         }
 
         pub inline fn eql(self: Rgb, other: Rgb) bool {
-            return self.r == other.r and
-                self.g == other.g and
-                self.b == other.b;
+            const self_bits: u24 = @bitCast(self);
+            const other_bits: u24 = @bitCast(other);
+            return self_bits == other_bits;
         }
     };
 
-    pub const Layer = enum {
+    pub const Layer = enum(u2) {
         foreground,
         background,
         underline,
@@ -398,10 +400,10 @@ pub const Attributes = packed struct(u12) {
         var i: usize = 0;
         var sep = ListSeparator.init(";");
 
-        inline for (@typeInfo(Attributes).@"struct".fields) |field| {
-            const attr_byte = comptime Map.get(field.name).?;
+        inline for (@typeInfo(Attributes).@"struct".field_names) |field_name| {
+            const attr_byte = comptime Map.get(field_name).?;
 
-            switch (@field(self, field.name)) {
+            switch (@field(self, field_name)) {
                 .inherit => {},
                 .unset => {
                     i += try sep.writeToBuf(buf[i..]);

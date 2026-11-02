@@ -54,7 +54,4 @@ pub fn build(b: *std.Build) void {
     const example_cmd = b.addRunArtifact(example_exe);
     example_run_step.dependOn(&example_cmd.step);
     example_cmd.step.dependOn(&example_exe.step);
-    if (b.args) |args| {
-        example_cmd.addArgs(args);
-    }
 }

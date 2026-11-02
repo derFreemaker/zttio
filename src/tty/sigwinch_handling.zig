@@ -17,7 +17,7 @@ const Handler = struct {
 };
 
 /// global signal handlers
-var handlers = [_]Handler{Handler{}} ** 8;
+var handlers: [8]Handler = @splat(Handler{});
 var handler_installed: std.atomic.Value(bool) = .init(false);
 
 pub fn setSignalHandler() void {

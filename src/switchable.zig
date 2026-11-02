@@ -6,7 +6,7 @@ pub fn Switchable(comptime T: type) type {
     }
 
     return struct {
-        pub const SwitchValue = std.meta.Int(.unsigned, @bitSizeOf(T));
+        pub const SwitchValue = @Int(.unsigned, @bitSizeOf(T));
 
         pub fn makeSwitchable(self: *const T) SwitchValue {
             return @as(SwitchValue, @bitCast(self.*));
