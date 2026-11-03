@@ -323,8 +323,8 @@ pub inline fn writeFlagStruct(writer: *std.Io.Writer, flags: anytype) std.Io.Wri
     if (@typeInfo(FlagsT) != .@"struct") @compileError(std.fmt.comptimePrint("expected a struct (T: {s}) as flags set", .{@typeName(FlagsT)}));
     const info = @typeInfo(FlagsT).@"struct";
 
-    inline for (info.fields) |field| {
-        try writeFlag(writer, field.name, @field(flags, field.name));
+    inline for (info.field_names) |field_name| {
+        try writeFlag(writer, field_name, @field(flags, field_name));
     }
 }
 
@@ -428,7 +428,7 @@ pub const AnimationState = enum(u8) {
     normal = 3,
 
     pub inline fn writeTo(self: *const AnimationState, writer: *std.Io.Writer) std.Io.Writer.Error!void {
-        try writeFlag(writer, "set_animation_state", @intFromEnum(self.*));
+        try writeFlag(writer, "set_animation_state", @backingInt(self.*));
     }
 };
 
@@ -437,7 +437,7 @@ pub const LoopState = enum(u32) {
     _,
 
     pub inline fn writeTo(self: *const LoopState, writer: *std.Io.Writer) std.Io.Writer.Error!void {
-        try writeFlag(writer, "set_loop_state", @intFromEnum(self.*));
+        try writeFlag(writer, "set_loop_state", @backingInt(self.*));
     }
 };
 

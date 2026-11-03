@@ -147,8 +147,6 @@ pub const Color = union(enum(u2)) {
     }
 
     pub fn eql(self: Color, other: Color) bool {
-        @compileLog(@sizeOf(Color));
-
         if (std.meta.activeTag(self) != std.meta.activeTag(other)) {
             return false;
         }
@@ -367,10 +365,10 @@ pub const Attributes = packed struct(u12) {
 
         var result = Attributes{};
 
-        inline for (@typeInfo(Attributes).@"struct".fields) |field| {
-            const result_field = &@field(result, field.name);
-            const self_field = &@field(self, field.name);
-            const other_field = &@field(other, field.name);
+        inline for (@typeInfo(Attributes).@"struct".field_names) |field_name| {
+            const result_field = &@field(result, field_name);
+            const self_field = &@field(self, field_name);
+            const other_field = &@field(other, field_name);
 
             if (self_field.* == other_field.*) {
                 result_field.* = .inherit;
@@ -385,10 +383,10 @@ pub const Attributes = packed struct(u12) {
     pub fn merge(self: Attributes, other: Attributes) Attributes {
         var result = Attributes{};
 
-        inline for (@typeInfo(Attributes).@"struct".fields) |field| {
-            const result_field = &@field(result, field.name);
-            const self_field = &@field(self, field.name);
-            const other_field = &@field(other, field.name);
+        inline for (@typeInfo(Attributes).@"struct".field_names) |field_name| {
+            const result_field = &@field(result, field_name);
+            const self_field = &@field(self, field_name);
+            const other_field = &@field(other, field_name);
 
             result_field.* = if (other_field.* == .inherit) self_field.* else other_field.*;
         }
