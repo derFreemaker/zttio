@@ -1,6 +1,6 @@
 // Auto-generated (25.09.2026 - 22:28) from the Code Page Identifiers table.
 // Source: https://learn.microsoft.com/en-us/windows/win32/intl/code-page-identifiers
-// Do not edit by hand -- regenerate with codepage_to_zig.py instead.
+// Do not edit by hand -- regenerate with codepage.py instead.
 
 pub const CODEPAGE = enum(u32) {
     /// IBM EBCDIC US-Canada

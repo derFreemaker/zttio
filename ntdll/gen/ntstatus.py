@@ -17,9 +17,9 @@ specification gives a code a description, it is emitted as a `///` doc
 comment above the field or alias.
 
 Usage:
-    python3 ntstatus_to_zig.py > ntstatus.zig
-    python3 ntstatus_to_zig.py --out ntstatus.zig
-    python3 ntstatus_to_zig.py page.html --out ntstatus.zig   # local copy
+    python3 ntstatus.py > ntstatus.zig
+    python3 ntstatus.py --out ntstatus.zig
+    python3 ntstatus.py page.html --out ntstatus.zig   # local copy
 """
 
 import argparse
@@ -153,7 +153,7 @@ def build_zig_enum(rows, enum_name, source):
     lines = []
     lines.append(f"// Auto-generated ({now_str}) from [MS-ERREF] 2.3.1 NTSTATUS Values.")
     lines.append(f"// Source: {source}")
-    lines.append("// Do not edit by hand -- regenerate with ntstatus_to_zig.py instead.")
+    lines.append("// Do not edit by hand -- regenerate with ntstatus.py instead.")
     lines.append("")
     lines.append(f"pub const {enum_name} = enum(u32) {{")
     for alias_name, code, _, description in aliases:

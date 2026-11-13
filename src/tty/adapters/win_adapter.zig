@@ -15,11 +15,11 @@ const INPUT_RECORD_BUF_LEN = 16;
 
 const WinAdapter = @This();
 
-stdin: windows.HANDLE,
+stdin: ntdll.HANDLE,
 stdin_buf: []u8,
 stdin_reader: std.Io.File.Reader,
 
-stdout: windows.HANDLE,
+stdout: ntdll.HANDLE,
 stdout_buf: []u8,
 stdout_writer: std.Io.File.Writer,
 

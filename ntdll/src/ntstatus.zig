@@ -1,16 +1,16 @@
 // Auto-generated (25.09.2026 - 22:28) from [MS-ERREF] 2.3.1 NTSTATUS Values.
 // Source: https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-erref/596a1078-e883-4972-9bbc-49e60bebca55
-// Do not edit by hand -- regenerate with ntstatus_to_zig.py instead.
+// Do not edit by hand -- regenerate with ntstatus.py instead.
 
 const raw = @import("root.zig");
 
 pub const NTSTATUS = enum(raw.ULONG) {
     /// The caller specified WaitAny for WaitType and one of the dispatcher objects in the Object array has been set to the signaled state.
-    pub const WAIT_0: NTSTATUS = @enumFromInt(0x00000000);
+    pub const WAIT_0: NTSTATUS = @fromBackingInt(@intCast(0x00000000));
     /// The caller attempted to wait for a mutex that has been abandoned.
-    pub const ABANDONED_WAIT_0: NTSTATUS = @enumFromInt(0x00000080);
+    pub const ABANDONED_WAIT_0: NTSTATUS = @fromBackingInt(@intCast(0x00000080));
     /// The maximum number of callouts has been reached.
-    pub const FWP_TOO_MANY_CALLOUTS: NTSTATUS = @enumFromInt(0xC0220018);
+    pub const FWP_TOO_MANY_CALLOUTS: NTSTATUS = @fromBackingInt(@intCast(0xC0220018));
 
     /// The operation completed successfully.
     SUCCESS = 0x00000000,

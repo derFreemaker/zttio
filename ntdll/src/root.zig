@@ -2,6 +2,14 @@ const std = @import("std");
 const assert = std.debug.assert;
 const builtin = @import("builtin");
 
+const ntdll = @This();
+
+// TODO: implement as build option
+const storeLastUnexpectedStatus = true;
+
+// TODO: implement as build option
+const printLastUnexpectedStatus = true;
+
 pub const UnexpectedError = error{
     /// The Operating System returned an undocumented error code.
     ///
@@ -13,19 +21,17 @@ pub const UnexpectedError = error{
     Unexpected,
 };
 
-threadlocal var lastUnexpectedStatus: NTSTATUS = .SUCCESS;
+threadlocal var lastUnexpectedStatus: if (storeLastUnexpectedStatus) NTSTATUS else void = if (storeLastUnexpectedStatus) .SUCCESS else {};
 
 pub fn unexpectedStatus(status: NTSTATUS) UnexpectedError {
-    // TODO: implement build option
-    if (true) {
+    if (comptime printLastUnexpectedStatus) {
         std.debug.print("error.Unexpected NTSTATUS=0x{x} ({s})\n", .{
-            @intFromEnum(status),
+            @backingInt(status),
             std.enums.tagName(NTSTATUS, status) orelse "<unnamed>",
         });
         std.debug.dumpCurrentStackTrace(.{ .first_address = @returnAddress() });
     }
-    // TODO: implement build option
-    if (true) {
+    if (comptime storeLastUnexpectedStatus) {
         lastUnexpectedStatus = status;
     }
     return error.Unexpected;
@@ -34,7 +40,7 @@ pub fn unexpectedStatus(status: NTSTATUS) UnexpectedError {
 pub fn statusBug(status: NTSTATUS) UnexpectedError {
     switch (builtin.mode) {
         .Debug => std.debug.panic("programmer bug caused NTSTATUS=0x{x} ({s})", .{
-            @intFromEnum(status),
+            @backingInt(status),
             std.enums.tagName(NTSTATUS, status) orelse "<unnamed>",
         }),
         else => return error.Unexpected,
@@ -42,6 +48,7 @@ pub fn statusBug(status: NTSTATUS) UnexpectedError {
 }
 
 pub fn getLastUnexpectedStatus() NTSTATUS {
+    comptime std.debug.assert(storeLastUnexpectedStatus);
     return lastUnexpectedStatus;
 }
 
@@ -54,21 +61,21 @@ test {
 /// so that the semantic analyzer sees them.
 /// For deep types, you may use `@setEvalBranchQuota`.
 fn refAllDeclsRecursive(comptime T: type) void {
-    inline for (comptime std.meta.declarations(T)) |decl| {
-        if (@TypeOf(@field(T, decl.name)) == type) {
-            switch (@typeInfo(@field(T, decl.name))) {
+    inline for (comptime std.meta.declarations(T)) |decl_name| {
+        if (@TypeOf(@field(T, decl_name)) == type) {
+            switch (@typeInfo(@field(T, decl_name))) {
                 .@"struct",
                 .@"enum",
                 .@"union",
                 .@"opaque",
-                => refAllDeclsRecursive(@field(T, decl.name)),
+                => refAllDeclsRecursive(@field(T, decl_name)),
 
                 else => {},
             }
         }
-        _ = &@field(T, decl.name);
+        _ = &@field(T, decl_name);
 
-        // @compileLog(decl, @field(T, decl.name), T);
+        // @compileLog(decl, @field(T, decl_name), T);
     }
 }
 
@@ -91,7 +98,7 @@ fn Bool(comptime BackingIntT: type) type {
         _,
 
         /// This is not the only truthy value, comparisons against this value are always a bug.
-        pub const TRUE: @This() = @enumFromInt(1);
+        pub const TRUE: @This() = @fromBackingInt(@intCast(1));
 
         pub const Backing = BackingIntT;
 
@@ -100,7 +107,7 @@ fn Bool(comptime BackingIntT: type) type {
         }
 
         pub fn fromBool(b: bool) @This() {
-            return @enumFromInt(@intFromBool(b));
+            return @fromBackingInt(@intCast(@intFromBool(b)));
         }
     };
 }
@@ -544,7 +551,7 @@ pub const IO_CONTROL_CODE = packed struct(ULONG) {
     // };
 
     // console control codes
-    // ref: https://github.com/microsoft/terminal/dep/Console/condrv.h
+    // ref: https://github.com/microsoft/terminal/blob/main/dep/Console/condrv.h
 
     pub const CONDRV_READ_IO: IO_CONTROL_CODE = .{
         .METHOD = .OUT_DIRECT,
@@ -1870,7 +1877,7 @@ pub const FILE = struct {
             SYNCHRONOUS_NONALERT = 0b10,
             _,
 
-            pub const VALID_FLAGS: @This() = @enumFromInt(0b11);
+            pub const VALID_FLAGS: @This() = @fromBackingInt(@intCast(0b11));
         },
         /// The file being opened must not be a directory file or this call fails.
         /// The file object being opened can represent a data file, a logical, virtual,
@@ -2124,7 +2131,7 @@ pub const SECURITY = struct {
         pub const DEFAULT: IMPERSONATION_LEVEL = .Impersonation;
 
         pub fn isValid(self: IMPERSONATION_LEVEL) bool {
-            return @intFromEnum(self) >= @intFromEnum(MIN) and @intFromEnum(self) <= @intFromEnum(MAX);
+            return @backingInt(self) >= @backingInt(MIN) and @backingInt(self) <= @backingInt(MAX);
         }
     };
 
@@ -2137,7 +2144,7 @@ pub const SECURITY = struct {
 };
 
 pub const CON_DRV = struct {
-    /// - ref: https://github.com/microsoft/terminal/dep/Console/condrv.h
+    /// - ref: https://github.com/microsoft/terminal/blob/main/dep/Console/condrv.h
     pub const IO_BUFFER = extern struct {
         Size: ULONG,
         Buffer: P(VOID),
@@ -2162,7 +2169,7 @@ pub const CON_DRV = struct {
         }
     };
 
-    /// - ref: https://github.com/microsoft/terminal/dep/Console/condrv.h
+    /// - ref: https://github.com/microsoft/terminal/blob/main/dep/Console/condrv.h
     pub fn USER_DEFINED_IO(comptime InputCount: comptime_int, comptime OutputCount: comptime_int) type {
         return extern struct {
             Client: ?HANDLE = null,
@@ -2214,7 +2221,7 @@ pub const CONSOLE = struct {
         };
     };
 
-    /// - ref: https://github.com/microsoft/terminal/dep/Console/conmsgl2.h
+    /// - ref: https://github.com/microsoft/terminal/blob/main/dep/Console/conmsgl2.h
     pub const ELEMENT_TYPE = enum(ULONG) {
         ASCII,
         REAL_UNICODE,
@@ -2306,7 +2313,7 @@ pub const CONSOLE = struct {
             dwEventFlags: FLAGS,
 
             pub const BUTTON_STATE = packed struct(DWORD) {
-                // ref: https://github.com/microsoft/terminal/src/terminal/parser/InputStateMachineEngine.cpp
+                // ref: https://github.com/microsoft/terminal/blob/main/src/terminal/parser/InputStateMachineEngine.cpp
 
                 /// usually left mouse button
                 FROM_LEFT_1ST_BUTTON_PRESSED: bool = false,
@@ -2317,16 +2324,16 @@ pub const CONSOLE = struct {
                 FROM_LEFT_3RD_BUTTON_PRESSED: bool = false,
                 FROM_LEFT_4TH_BUTTON_PRESSED: bool = false,
                 Unused5: u17 = 0,
-                /// - ref: https://github.com/microsoft/terminal/src/terminal/parser/InputStateMachineEngine.hpp
+                /// - ref: https://github.com/microsoft/terminal/blob/main/src/terminal/parser/InputStateMachineEngine.hpp
                 SCROLL_DELTA: bool = false,
                 Unused23: u9 = 0,
 
-                /// - ref: https://github.com/microsoft/terminal/src/terminal/parser/InputStateMachineEngine.hpp
+                /// - ref: https://github.com/microsoft/terminal/blob/main/src/terminal/parser/InputStateMachineEngine.hpp
                 pub fn isScrollDeltaForward(self: BUTTON_STATE) bool {
                     return self.SCROLL_DELTA and @as(DWORD, @bitCast(self)) & 0xFF000000 == 0;
                 }
 
-                /// - ref: https://github.com/microsoft/terminal/src/terminal/parser/InputStateMachineEngine.hpp
+                /// - ref: https://github.com/microsoft/terminal/blob/main/src/terminal/parser/InputStateMachineEngine.hpp
                 pub fn isScrollDeltaBackward(self: BUTTON_STATE) bool {
                     return self.SCROLL_DELTA and @as(DWORD, @bitCast(self)) & 0xFF000000 != 0;
                 }
@@ -2368,7 +2375,7 @@ pub const CONSOLE = struct {
         };
     };
 
-    /// - ref: https://github.com/microsoft/terminal/dep/Console/conmsgl1.h
+    /// - ref: https://github.com/microsoft/terminal/blob/main/dep/Console/conmsgl1.h
     pub const HEADER = extern struct {
         ApiNumber: API_NUMBER,
         ApiDescriptorSize: ULONG,
@@ -2380,21 +2387,21 @@ pub const CONSOLE = struct {
             pub fn L1(func: L1Func) API_NUMBER {
                 return API_NUMBER{
                     .Layer = .L1,
-                    .Function = @intFromEnum(func),
+                    .Function = @backingInt(func),
                 };
             }
 
             pub fn L2(func: L2Func) API_NUMBER {
                 return API_NUMBER{
                     .Layer = .L2,
-                    .Function = @intFromEnum(func),
+                    .Function = @backingInt(func),
                 };
             }
 
             pub fn L3(func: L3Func) API_NUMBER {
                 return API_NUMBER{
                     .Layer = .L3,
-                    .Function = @intFromEnum(func),
+                    .Function = @backingInt(func),
                 };
             }
 
@@ -2419,6 +2426,7 @@ pub const CONSOLE = struct {
                 GetLangId,
                 /// - *DEPRECATED*
                 MapBitmap,
+                _,
             };
 
             pub const L2Func = enum(u24) {
@@ -2444,6 +2452,7 @@ pub const CONSOLE = struct {
                 ReadConsoleOutput,
                 GetTitle,
                 SetTitle,
+                _,
             };
 
             pub const L3Func = enum(u24) {
@@ -2492,11 +2501,12 @@ pub const CONSOLE = struct {
                 GetHistory,
                 SetHistory,
                 SetCurrentFont,
+                _,
             };
         };
     };
 
-    /// - ref: https://github.com/microsoft/terminal/dep/Console/conmsgl1.h
+    /// - ref: https://github.com/microsoft/terminal/blob/main/dep/Console/conmsgl1.h
     pub fn MSG(comptime BodyT: type, comptime api: HEADER.API_NUMBER) type {
         return extern struct {
             Header: HEADER = .{
@@ -2507,7 +2517,7 @@ pub const CONSOLE = struct {
         };
     }
 
-    // ref: https://github.com/microsoft/terminal/dep/Console/conmsgl1.h
+    // ref: https://github.com/microsoft/terminal/blob/main/dep/Console/conmsgl1.h
 
     pub const GetCPMsg = MSG(GETCP_BODY, .L1(.GetCP));
     pub const GETCP_BODY = extern struct {
@@ -2541,7 +2551,7 @@ pub const CONSOLE = struct {
         /// - *IN*
         Unicode: BOOLEAN,
 
-        /// - ref: https://github.com/microsoft/terminal/dep/Console/ntcon.h
+        /// - ref: https://github.com/microsoft/terminal/blob/main/dep/Console/ntcon.h
         pub const FLAGS = packed struct(USHORT) {
             READ_NOREMOVE: bool = false,
             READ_NOWAIT: bool = false,
@@ -2635,7 +2645,7 @@ pub const CONSOLE = struct {
         Bitmap: ?P(VOID),
     };
 
-    // ref: https://github.com/microsoft/terminal/dep/Console/conmsgl2.h
+    // ref: https://github.com/microsoft/terminal/blob/main/dep/Console/conmsgl2.h
 
     pub const FillConsoleOutputMsg = MSG(FILLCONSOLEOUTPUT_BODY, .L2(.FillConsoleOutput));
     pub const FILLCONSOLEOUTPUT_BODY = extern struct {
@@ -2840,7 +2850,7 @@ pub const CONSOLE = struct {
         Unicode: BOOLEAN,
     };
 
-    // ref: https://github.com/microsoft/terminal/dep/Console/conmsgl3.h
+    // ref: https://github.com/microsoft/terminal/blob/main/dep/Console/conmsgl3.h
 
     /// - *DEPRECATED*
     pub const GetNumberOfFontsMsg = MSG(GETNUMBEROFFONTS_BODY, .L3(.GetNumberOfFonts));
@@ -3329,14 +3339,30 @@ pub extern "ntdll" fn NtOpenFile(
     IN_OpenOptions: FILE.MODE,
 ) callconv(.winapi) NTSTATUS;
 
+/// The `NtDeviceIoControlFile` function sends a control code directly to a specified device driver, causing the corresponding driver to perform the specified operation.
+///
+/// - [in] `FileHandle` A handle to the file object representing the file or directory on which the specified action is to be performed.
+/// - [in] `Event` A handle for a caller-created event. This parameter is optional and can be NULL. It must be NULL if the caller will wait for the FileHandle to be set to the Signaled state.
+/// - [in] `ApcRoutine` Address of a caller-supplied APC routine to be called when the requested operation completes. This parameter is optional and can be NULL.
+/// - [in] `ApcContext` Pointer to a caller-determined context area. This parameter value is used as the APC context if the caller supplies an APC, or is used as the completion context if an I/O completion object has been associated with the file object.
+/// - [out] `IoStatusBlock` Pointer to an IO_STATUS_BLOCK structure that receives the final completion status and information about the operation.
+/// - [in] `IoControlCode` IOCTL_XXX code that indicates which device I/O control operation is to be carried out on, usually by the underlying device driver.
+/// - [in] `InputBuffer` Pointer to a caller-allocated input buffer that contains device-specific information to be given to the target driver.
+/// - [in] `InputBufferLength` Size, in bytes, of the buffer at InputBuffer. This value is ignored if InputBuffer is NULL.
+/// - [out] `OutputBuffer` Pointer to a caller-allocated output buffer in which information is returned from the target driver.
+/// - [in] `OutputBufferLength` Size, in bytes, of the buffer at OutputBuffer. This value is ignored if OutputBuffer is NULL.
+/// - [return] NTSTATUS Successful or errant status.
+///
 /// ### References
 /// - km/ntifs.h
+/// - km/ntioapi.h
+/// - https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/nf-ntifs-zwdeviceiocontrolfile
 ///
 /// ### Version
 /// WIN2K - ...
 pub extern "ntdll" fn NtDeviceIoControlFile(
     IN_FileHandle: HANDLE,
-    IN_Event: ?HANDLE,
+    IN_Event: ?HANDLE, // TODO: add Event functions
     IN_ApcRoutine: ?PC(IO_APC_ROUTINE),
     IN_ApcContext: ?P(VOID),
     OUT_IoStatusBlock: P(IO_STATUS_BLOCK),

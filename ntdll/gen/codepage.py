@@ -19,9 +19,9 @@ Any resulting name that is not a legal bare Zig identifier is emitted as
 an @"..." quoted identifier.
 
 Usage:
-    python3 codepage_to_zig.py > codepages.zig
-    python3 codepage_to_zig.py --out codepages.zig
-    python3 codepage_to_zig.py page.html --out codepages.zig   # local copy
+    python3 codepage.py > codepages.zig
+    python3 codepage.py --out codepages.zig
+    python3 codepage.py page.html --out codepages.zig   # local copy
 """
 
 import argparse
@@ -140,7 +140,7 @@ def build_zig_enum(rows, enum_name, source):
     lines = []
     lines.append(f"// Auto-generated ({now_str}) from the Code Page Identifiers table.")
     lines.append(f"// Source: {source}")
-    lines.append("// Do not edit by hand -- regenerate with codepage_to_zig.py instead.")
+    lines.append("// Do not edit by hand -- regenerate with codepage.py instead.")
     lines.append("")
     lines.append(f"pub const {enum_name} = enum(u32) {{")
     for name, identifier, description in fields:

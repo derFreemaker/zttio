@@ -191,8 +191,8 @@ const testing = std.testing;
 test getNamedPipeDevice {
     if (builtin.os.tag != .windows) return error.SkipZigTest;
 
-    const handle = try getNamedPipeDevice();
-    try testing.expect(handle != ntdll.INVALID_HANDLE);
+    const file_handle = try getNamedPipeDevice();
+    try testing.expect(file_handle != ntdll.INVALID_HANDLE);
 }
 
 test WinPipe {

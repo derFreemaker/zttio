@@ -17,13 +17,7 @@ pub fn main(init: std.process.Init) !u8 {
     if (comptime builtin.os.tag != .windows) zttio.SigwinchHandling.setSignalHandler();
     defer if (comptime builtin.os.tag != .windows) zttio.SigwinchHandling.resetSignalHandler();
 
-    var gpa: std.heap.DebugAllocator(.{
-        .never_unmap = true,
-        .retain_metadata = true,
-        .stack_trace_frames = 50,
-    }) = .init;
-    defer if (gpa.deinit() == .leak) @panic("leaks found");
-    const allocator = gpa.allocator();
+    const allocator = init.gpa;
     const event_allocator = allocator;
 
     const stdin: std.Io.File = .stdin();

@@ -15,7 +15,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
 
-        .root_source_file = b.path("src/zttio.zig"),
+        .root_source_file = b.path("src/root.zig"),
 
         .imports = &.{
             .{ .name = "uucode", .module = uucode_mod },
