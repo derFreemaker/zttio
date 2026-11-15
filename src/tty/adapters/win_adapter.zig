@@ -103,12 +103,14 @@ fn getWinsize(self_ptr: *anyopaque) Adapter.GetWinsizeError!Winsize {
             0,
         )) {
             .SUCCESS => {},
+
             .INVALID_HANDLE,
             .ILLEGAL_FUNCTION,
             => |status| {
                 ntdll.statusBug(status) catch
                     return Adapter.GetWinsizeError.Failed;
             },
+
             else => |status| {
                 ntdll.unexpectedStatus(status) catch
                     return Adapter.GetWinsizeError.Failed;
@@ -481,11 +483,13 @@ fn readNextEvents(self: *WinAdapter) ntdll.UnexpectedError!bool {
             0,
         )) {
             .SUCCESS => {},
+
             .INVALID_HANDLE,
             .ILLEGAL_FUNCTION,
             => |status| {
                 return ntdll.statusBug(status);
             },
+
             else => |status| {
                 return ntdll.unexpectedStatus(status);
             },
@@ -571,7 +575,7 @@ fn isEnabled(self_ptr: *anyopaque) bool {
     return self.org_state != null;
 }
 
-fn getConsoleCP(handle: ntdll.HANDLE) error{Unexpected}!ntdll.CONSOLE.CODEPAGE {
+fn getConsoleCP(handle: ntdll.HANDLE) error{ InvalidHandle, Unexpected }!ntdll.CONSOLE.CODEPAGE {
     var get_console_cp: ntdll.CONSOLE.GetCPMsg = .{ .Body = .{
         .CodePage = undefined,
         .Output = .FALSE,
@@ -596,11 +600,13 @@ fn getConsoleCP(handle: ntdll.HANDLE) error{Unexpected}!ntdll.CONSOLE.CODEPAGE {
             0,
         )) {
             .SUCCESS => {},
-            .INVALID_HANDLE,
+
+            .INVALID_HANDLE => return error.InvalidHandle,
             .ILLEGAL_FUNCTION,
             => |status| {
                 return ntdll.statusBug(status);
             },
+
             else => |status| {
                 return ntdll.unexpectedStatus(status);
             },
@@ -610,7 +616,7 @@ fn getConsoleCP(handle: ntdll.HANDLE) error{Unexpected}!ntdll.CONSOLE.CODEPAGE {
     return get_console_cp.Body.CodePage;
 }
 
-fn setConsoleCP(handle: ntdll.HANDLE, codepage: ntdll.CONSOLE.CODEPAGE) error{Unexpected}!void {
+fn setConsoleCP(handle: ntdll.HANDLE, codepage: ntdll.CONSOLE.CODEPAGE) error{ InvalidHandle, Unexpected }!void {
     var set_console_output_cp: ntdll.CONSOLE.SetCPMsg = .{ .Body = .{
         .CodePage = codepage,
         .Output = .FALSE,
@@ -634,11 +640,13 @@ fn setConsoleCP(handle: ntdll.HANDLE, codepage: ntdll.CONSOLE.CODEPAGE) error{Un
             0,
         )) {
             .SUCCESS => {},
-            .INVALID_HANDLE,
+
+            .INVALID_HANDLE => return error.InvalidHandle,
             .ILLEGAL_FUNCTION,
             => |status| {
                 return ntdll.statusBug(status);
             },
+
             else => |status| {
                 return ntdll.unexpectedStatus(status);
             },
@@ -667,11 +675,13 @@ fn getConsoleMode(handle: ntdll.HANDLE) error{ InvalidHandle, Unexpected }!ntdll
             0,
         )) {
             .SUCCESS => {},
+
             .INVALID_HANDLE => return error.InvalidHandle,
             .ILLEGAL_FUNCTION,
             => |status| {
                 return ntdll.statusBug(status);
             },
+
             else => |status| {
                 return ntdll.unexpectedStatus(status);
             },
@@ -704,11 +714,13 @@ fn setConsoleMode(handle: ntdll.HANDLE, mode: ntdll.CONSOLE.MODE) error{ Invalid
             0,
         )) {
             .SUCCESS => {},
+
             .INVALID_HANDLE => return error.InvalidHandle,
             .ILLEGAL_FUNCTION,
             => |status| {
                 return ntdll.statusBug(status);
             },
+
             else => |status| {
                 return ntdll.unexpectedStatus(status);
             },
