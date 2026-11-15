@@ -3310,21 +3310,6 @@ pub extern "ntdll" fn NtClose(
     IN_Handle: HANDLE,
 ) callconv(.winapi) NTSTATUS;
 
-/// Convenience wrapper for `NtClose` ignoring any not `.SUCCESS` status.
-///
-/// While still saving any status that is not `.SUCCESS`,
-/// if last unexpected status preservation is enabled.
-///
-/// Following zig's standard that resource deallocation cannot fail.
-pub fn NtCloseSafe(handle: HANDLE) void {
-    switch (NtClose(handle)) {
-        .SUCCESS => {},
-        else => |status| {
-            unexpectedStatus(status) catch {};
-        },
-    }
-}
-
 /// ### References
 /// - km/ntifs.h
 ///

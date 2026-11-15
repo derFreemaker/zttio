@@ -57,7 +57,7 @@ pub fn init(self: *WinPipe, options: Options) error{ Resources, Unexpected }!voi
         };
         break :server handle;
     };
-    errdefer ntdll.NtCloseSafe(self.server);
+    errdefer _ = ntdll.NtClose(self.server);
 
     self.client = client: {
         var handle: ntdll.HANDLE = undefined;
@@ -95,12 +95,12 @@ pub fn init(self: *WinPipe, options: Options) error{ Resources, Unexpected }!voi
         };
         break :client handle;
     };
-    errdefer ntdll.NtCloseSafe(self.client);
+    errdefer _ = ntdll.NtClose(self.client);
 }
 
 pub fn deinit(self: *WinPipe) void {
-    ntdll.NtCloseSafe(self.client);
-    ntdll.NtCloseSafe(self.server);
+    _ = ntdll.NtClose(self.client);
+    _ = ntdll.NtClose(self.server);
 }
 
 pub const Options = struct {
@@ -149,7 +149,7 @@ fn getNamedPipeDevice() ntdll.UnexpectedError!ntdll.HANDLE {
                 .monotonic,
             );
             if (compare_result) |prev_handle| {
-                ntdll.NtCloseSafe(fresh_handle);
+                _ = ntdll.NtClose(fresh_handle);
                 return prev_handle.?;
             } else {
                 return fresh_handle;
