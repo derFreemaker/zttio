@@ -33,5 +33,4 @@ from the terminal like key presses and mouse interactions.
 - [iTerm2 Image Protocol](https://iterm2.com/documentation-images.html)
 
 ## Dependencies
-- [zigwin32](https://github.com/marlersoft/zigwin32) (windows only)
 - [uucode](https://github.com/jacobsandlund/uucode)
