@@ -2151,7 +2151,7 @@ pub const CON_DRV = struct {
 
         pub fn is(self: *IO_BUFFER, buffer_ptr: anytype) void {
             if (@typeInfo(@TypeOf(buffer_ptr)) != .pointer) {
-                @compileError("expected a pointer or a slice, got: " ++ @typeName(@TypeOf(buffer_ptr)));
+                @compileError("expected a pointer to a single structure or a slice, got: " ++ @typeName(@TypeOf(buffer_ptr)));
             }
             const info = @typeInfo(@TypeOf(buffer_ptr)).pointer;
 
@@ -2164,7 +2164,7 @@ pub const CON_DRV = struct {
                     self.Size = @sizeOf(info.child) * buffer_ptr.len;
                     self.Buffer = buffer_ptr;
                 },
-                else => @compileError("expected a pointer or a slice, got: " ++ @typeName(@TypeOf(buffer_ptr))),
+                else => @compileError("expected a pointer to a single structure or a slice, got: " ++ @typeName(@TypeOf(buffer_ptr))),
             }
         }
     };
@@ -3273,15 +3273,27 @@ pub const CONSOLE = struct {
 // |          Functions          |
 // -------------------------------
 
+///
+/// The `NtWaitForSingleObject` routine waits until the specified object is in the signaled state or the time-out interval elapses.
+///
+/// - [in] `Handle` The handle to the wait object.
+/// - [in] `Alertable` The function returns when either the time-out period has elapsed or when the APC function is called.
+/// - [in] `Timeout` A pointer to an absolute or relative time over which the wait is to occur. Can be null. If a timeout is specified,
+/// and the object has not attained a state of signaled when the timeout expires, then the wait is automatically satisfied.
+/// If an explicit timeout value of zero is specified, then no wait occurs if the wait cannot be satisfied immediately.
+/// - [return] NTSTATUS Successful or errant status.
+///
+///
 /// ### References
 /// - um/winternl.h
+/// - https://learn.microsoft.com/en-us/windows/win32/api/winternl/nf-winternl-ntwaitforsingleobject
 ///
 /// ### Version
 /// WIN2K - ...
 pub extern "ntdll" fn NtWaitForSingleObject(
     IN_Handle: HANDLE,
     IN_Alertable: BOOLEAN,
-    IN_OPT_Timeout: ?*const LARGE_INTEGER,
+    IN_Timeout: ?PC(LARGE_INTEGER),
 ) callconv(.winapi) NTSTATUS;
 
 /// ### Notable return values
