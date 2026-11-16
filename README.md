@@ -3,8 +3,6 @@
 TTY interface with main focus on making it easy to get input
 from the terminal like key presses and mouse interactions.
 
-### [Project Overview](https://www.notion.so/2c97f91634e5800e8c9cfb75af5e8474?v=2c97f91634e581d7898f000c9df3a935&source=copy_link)
-
 ### [Supported Escape Sequences](escape_sequences.md)
 
 ### [Supported Capabilities Detection](capabilities_detection.md)
