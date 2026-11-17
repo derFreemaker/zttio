@@ -1,3 +1,4 @@
+const std = @import("std");
 const builtin = @import("builtin");
 
 const WinPipe = @import("WinPipe.zig");
@@ -10,22 +11,19 @@ internal: if (builtin.os.tag == .windows)
 else
     PosixPipe,
 
-pub fn init(self: *Pipe, options: Options) error{ Resources, Unexpected }!void {
+pub fn init(self: *Pipe, io: std.Io, read_buf: []u8, write_buf: []u8, options: Options) error{ Resources, Unexpected }!void {
     if (builtin.os.tag == .windows) {
-        try WinPipe.init(&self.internal, .{
-            .server = .{
-                .attributes = .{ .INHERIT = false },
+        try WinPipe.init(&self.internal, io, read_buf, write_buf, .{
+            .read = .{
                 .mode = .{ .IO = if (options.non_blocking) .ASYNCHRONOUS else .SYNCHRONOUS_NONALERT },
             },
-            .client = .{
-                .attributes = .{ .INHERIT = false },
+            .write = .{
                 .mode = .{ .IO = if (options.non_blocking) .ASYNCHRONOUS else .SYNCHRONOUS_NONALERT },
             },
-            .outbound = true,
         });
     } else {
-        try PosixPipe.init(&self.internal, .{
-            .non_blocking = options.non_blocking,
+        try PosixPipe.init(&self.internal, io, read_buf, write_buf, .{
+            .NONBLOCK = options.non_blocking,
         });
     }
 }
@@ -34,22 +32,34 @@ pub fn deinit(self: *Pipe) void {
     self.internal.deinit();
 }
 
+pub fn reader(self: *Pipe) *std.Io.Reader {
+    return self.internal.reader();
+}
+
+pub fn writer(self: *Pipe) *std.Io.Writer {
+    return self.internal.writer();
+}
+
 pub const Options = struct {
     non_blocking: bool = false,
 };
 
-test "blocking" {
-    var pipe: Pipe = undefined;
-    try pipe.init(.{
-        .non_blocking = false,
-    });
-    pipe.deinit();
-}
+test Pipe {
+    const allocator = std.testing.allocator;
 
-test "non blocking" {
     var pipe: Pipe = undefined;
-    try pipe.init(.{
-        .non_blocking = true,
-    });
-    pipe.deinit();
+    try pipe.init(std.testing.io, &.{}, &.{}, .{});
+    defer pipe.deinit();
+
+    const str = "test bytes";
+
+    var pwriter = pipe.writer();
+    try pwriter.writeAll(str);
+    try pwriter.flush();
+
+    var preader = pipe.reader();
+    const read = try preader.readAllocAll(allocator, str.len);
+    defer allocator.free(read);
+
+    try std.testing.expectEqualStrings(str, read);
 }

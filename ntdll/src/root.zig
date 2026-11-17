@@ -7,9 +7,6 @@ const ntdll = @This();
 // TODO: implement as build option
 const storeLastUnexpectedStatus = true;
 
-// TODO: implement as build option
-const printLastUnexpectedStatus = true;
-
 pub const UnexpectedError = error{
     /// The Operating System returned an undocumented error code.
     ///
@@ -24,7 +21,7 @@ pub const UnexpectedError = error{
 threadlocal var lastUnexpectedStatus: if (storeLastUnexpectedStatus) NTSTATUS else void = if (storeLastUnexpectedStatus) .SUCCESS else {};
 
 pub fn unexpectedStatus(status: NTSTATUS) UnexpectedError {
-    if (comptime printLastUnexpectedStatus) {
+    if (std.options.unexpected_error_tracing) {
         std.debug.print("error.Unexpected NTSTATUS=0x{x} ({s})\n", .{
             @backingInt(status),
             std.enums.tagName(NTSTATUS, status) orelse "<unnamed>",

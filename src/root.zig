@@ -1,6 +1,16 @@
 const builtin = @import("builtin");
 
-pub const Adapter = @import("tty/adapter.zig");
+pub const Pipe = @import("pipe/Pipe.zig");
+pub const Pipes = struct {
+    const PosixPipe = @import("pipe/PosixPipe.zig");
+    const WinPipe = @import("pipe/WinPipe.zig");
+
+    pub const NativePipe = switch (builtin.os.tag) {
+        .windows => WinPipe,
+        else => PosixPipe,
+    };
+};
+
 pub const Color = @import("color.zig").Color;
 pub const ctlseqs = @import("ctlseqs.zig");
 pub const Event = @import("tty/event.zig").Event;
@@ -17,20 +27,20 @@ pub const Graphics = struct {
 };
 
 pub const SigwinchHandling = if (builtin.os.tag != .windows) @import("tty/sigwinch_handling.zig") else void;
+pub const Adapter = @import("tty/adapter.zig");
 pub const Adapters = struct {
+    const PosixAdapter = @import("tty/adapters/posix_adapter.zig");
+    const WinAdapter = @import("tty/adapters/win_adapter.zig");
+
     pub const NativeAdapter = switch (builtin.os.tag) {
-        .windows => @import("tty/adapters/win_adapter.zig"),
-        else => @import("tty/adapters/posix_adapter.zig"),
+        .windows => WinAdapter,
+        else => PosixAdapter,
     };
 
     pub const PipeAdater = @import("tty/adapters/pipe_adapter.zig");
 };
 
 test {
-    _ = @import("pipe/WinPipe.zig");
-    _ = @import("pipe/PosixPipe.zig");
-    _ = @import("pipe/Pipe.zig");
-
     _ = @import("tty/terminal_capabilities.zig");
     _ = @import("tty/parser.zig");
 

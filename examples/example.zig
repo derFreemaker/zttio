@@ -60,7 +60,7 @@ pub fn main(init: std.process.Init) !u8 {
 
         switch (event) {
             .key_press => |key| switch (key.switchable()) {
-                zttio.Key.matches(.from('c'), .{ .ctrl = true }) => {
+                zttio.Key.matches(.c, .{ .ctrl = true }) => {
                     break;
                 },
                 zttio.Key.matches(.up, .{}) => {
