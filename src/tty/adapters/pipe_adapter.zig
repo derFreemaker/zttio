@@ -23,7 +23,7 @@ pub fn adapter(self: *PipeAdapter) Adapter {
     return Adapter{ .ptr = self, .vtable = &Adapter.VTable{
         .enable = Adapter.noEnable,
         .disable = Adapter.noDisable,
-        .isEnabled = Adapter.neverEnabled,
+        .isEnabled = Adapter.alwaysEnabled,
 
         .getWinsize = getWinsize,
         .waitForData = Adapter.noWaitForData,

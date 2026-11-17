@@ -39,7 +39,8 @@ pub fn main(init: std.process.Init) !u8 {
         tty.deinit();
     }
 
-    try tty.enableAndResetAlternativeScreen();
+    try tty.enableAlternativeScreen();
+    try tty.resetScreen();
     defer tty.disableAlternativeScreen() catch {};
 
     try tty.writer.print("caps: {any}\n", .{tty.caps});

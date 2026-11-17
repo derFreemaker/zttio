@@ -191,11 +191,6 @@ pub fn disableAlternativeScreen(self: *Tty) std.Io.Writer.Error!void {
     return self.writer.writeAll(ctlseqs.Screen.alternative_disable);
 }
 
-pub fn enableAndResetAlternativeScreen(self: *Tty) std.Io.Writer.Error!void {
-    try self.enableAlternativeScreen();
-    try self.resetScreen();
-}
-
 pub fn setMouseEvents(self: *Tty, enable: bool) std.Io.Writer.Error!void {
     if (!enable) {
         return self.writer.writeAll(ctlseqs.Terminal.mouse_reset);

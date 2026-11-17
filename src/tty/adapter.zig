@@ -83,9 +83,9 @@ pub fn noDisable(self_ptr: *anyopaque) void {
     _ = self_ptr;
 }
 
-pub fn neverEnabled(self_ptr: *anyopaque) bool {
+pub fn alwaysEnabled(self_ptr: *anyopaque) bool {
     _ = self_ptr;
-    return false;
+    return true;
 }
 
 pub fn fixedWinsize(comptime winsize: ?Winsize) fn (self_ptr: *anyopaque) GetWinsizeError!Winsize {

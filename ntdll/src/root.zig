@@ -2149,7 +2149,7 @@ pub const CON_DRV = struct {
         Size: ULONG,
         Buffer: P(VOID),
 
-        pub fn is(self: *IO_BUFFER, buffer_ptr: anytype) void {
+        pub fn from(buffer_ptr: anytype) IO_BUFFER {
             if (@typeInfo(@TypeOf(buffer_ptr)) != .pointer) {
                 @compileError("expected a pointer to a single structure or a slice, got: " ++ @typeName(@TypeOf(buffer_ptr)));
             }
@@ -2157,12 +2157,16 @@ pub const CON_DRV = struct {
 
             switch (info.size) {
                 .one => {
-                    self.Size = @sizeOf(info.child);
-                    self.Buffer = buffer_ptr;
+                    return IO_BUFFER{
+                        .Size = @sizeOf(info.child),
+                        .Buffer = buffer_ptr,
+                    };
                 },
                 .slice => {
-                    self.Size = @sizeOf(info.child) * buffer_ptr.len;
-                    self.Buffer = buffer_ptr;
+                    return IO_BUFFER{
+                        .Size = @sizeOf(info.child) * buffer_ptr.len,
+                        .Buffer = buffer_ptr,
+                    };
                 },
                 else => @compileError("expected a pointer to a single structure or a slice, got: " ++ @typeName(@TypeOf(buffer_ptr))),
             }
@@ -2175,7 +2179,16 @@ pub const CON_DRV = struct {
             Client: ?HANDLE = null,
             InputCount: ULONG = InputCount,
             OutputCount: ULONG = OutputCount,
-            Buffers: [InputCount + OutputCount]IO_BUFFER = undefined,
+
+            // NOTE(freemaker): split the 'Buffers' field into 'InputBuffers' and 'OutputBuffers'
+            InputBuffers: [InputCount]IO_BUFFER = undefined,
+            OutputBuffers: [OutputCount]IO_BUFFER = undefined,
+
+            const Self = @This();
+
+            pub fn len(_: Self) u32 {
+                return comptime @intCast(@sizeOf(Self));
+            }
         };
     }
 };
